@@ -58,12 +58,25 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
   return prices.slice(0, days);
 };
 
+// Generate price data for all available assets
 const CRYPTO_DATA = {
-  BTC: generateMeanRevertingData(42000, 0.04, 'BTC'),     // Bitcoin - cycles every 3 months
-  TSLA: generateMeanRevertingData(238, 0.06, 'TSLA'),     // Tesla - offset cycle (pumps when BTC dumps)
-  SOL: generateMeanRevertingData(98, 0.07, 'SOL'),        // Solana - different cycle timing
-  GOLD: generateMeanRevertingData(2050, 0.015, 'GOLD'),   // Gold - low volatility, counter-cyclical
-  USDC: Array(365).fill(1)                                 // Stablecoin
+  // Crypto
+  BTC: generateMeanRevertingData(42000, 0.04, 'BTC'),
+  ETH: generateMeanRevertingData(2200, 0.05, 'ETH'),
+  SOL: generateMeanRevertingData(98, 0.07, 'SOL'),
+  USDC: Array(365).fill(1),
+  USDT: Array(365).fill(1),
+  
+  // Stocks
+  TSLA: generateMeanRevertingData(238, 0.06, 'TSLA'),
+  AAPL: generateMeanRevertingData(178, 0.04, 'AAPL'),
+  NVDA: generateMeanRevertingData(495, 0.08, 'NVDA'),
+  MSFT: generateMeanRevertingData(378, 0.05, 'MSFT'),
+  GOOGL: generateMeanRevertingData(140, 0.05, 'GOOGL'),
+  
+  // Commodities
+  GOLD: generateMeanRevertingData(2050, 0.015, 'GOLD'),
+  SILVER: generateMeanRevertingData(24, 0.025, 'SILVER')
 };
 
 const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 364];
