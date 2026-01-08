@@ -6,37 +6,43 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
   const days = 365;
   const prices = [startPrice];
   
-  // Create cycles where assets take turns pumping and dumping
-  // This makes rebalancing profitable (sell high, buy low)
-  const cycleLength = 90; // 3-month cycles
+  // Create MORE frequent cycles with HIGHER volatility for better rebalancing gains
+  // This makes "sell high, buy low" more profitable
+  const cycleLength = 60; // Shorter cycles (every 2 months instead of 3)
   const numCycles = Math.floor(days / cycleLength);
   
   for (let cycle = 0; cycle < numCycles; cycle++) {
     // Each asset gets its own cycle offset so they pump at different times
     let phaseOffset = 0;
     if (assetType === 'BTC') phaseOffset = 0;
-    if (assetType === 'TSLA') phaseOffset = 30;
-    if (assetType === 'SOL') phaseOffset = 60;
-    if (assetType === 'GOLD') phaseOffset = 45;
+    if (assetType === 'TSLA') phaseOffset = 20;
+    if (assetType === 'SOL') phaseOffset = 40;
+    if (assetType === 'GOLD') phaseOffset = 30;
+    if (assetType === 'ETH') phaseOffset = 15;
+    if (assetType === 'AAPL') phaseOffset = 25;
+    if (assetType === 'NVDA') phaseOffset = 35;
+    if (assetType === 'MSFT') phaseOffset = 45;
+    if (assetType === 'GOOGL') phaseOffset = 50;
+    if (assetType === 'SILVER') phaseOffset = 55;
     
     const adjustedPhase = (cycle * cycleLength + phaseOffset) % 365;
     
     // Determine if this asset is pumping or dumping in this cycle
-    const isPumping = (adjustedPhase % 180) < 90;
-    const trend = isPumping ? 0.008 : -0.005; // Pump or dump
+    const isPumping = (adjustedPhase % 120) < 60;
+    const trend = isPumping ? 0.012 : -0.008; // INCREASED swing amplitude (was 0.008/-0.005)
     
     for (let i = 0; i < cycleLength && prices.length < days; i++) {
       const prevPrice = prices[prices.length - 1];
       
-      // Trend component (up or down)
+      // Trend component (up or down) - STRONGER
       const trendMove = prevPrice * trend;
       
-      // Random volatility
-      const randomMove = prevPrice * (Math.random() - 0.5) * baseVolatility * 2;
+      // Random volatility - INCREASED (was baseVolatility * 2)
+      const randomMove = prevPrice * (Math.random() - 0.5) * baseVolatility * 3;
       
-      // Mean reversion force (pulls back toward starting price)
+      // Mean reversion force (pulls back toward starting price) - STRONGER
       const distanceFromStart = (prevPrice - startPrice) / startPrice;
-      const meanReversionForce = -distanceFromStart * prevPrice * 0.003;
+      const meanReversionForce = -distanceFromStart * prevPrice * 0.005; // Increased from 0.003
       
       let newPrice = prevPrice + trendMove + randomMove + meanReversionForce;
       
@@ -58,7 +64,7 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
   return prices.slice(0, days);
 };
 
-// Generate price data for all available assets
+// Generate price data for all available assets (volatile market scenario)
 const CRYPTO_DATA = {
   // Crypto
   BTC: generateMeanRevertingData(42000, 0.04, 'BTC'),
@@ -185,11 +191,36 @@ const AutoFolio = () => {
           }
         });
         
-        // Perform rebalancing
+        // Perform rebalancing WITH TRADING FEES
+        const TRADING_FEE = 0.003; // 0.3% Jupiter swap fee
+        let totalFees = 0;
+        
+        // Calculate how much value needs to be moved for each asset
+        const valueChanges = {};
+        assets.forEach(asset => {
+          const currentValue = currentAllocations[asset];
+          const targetValue = totalValue * (targetAllocations[asset] / 100);
+          const valueChange = Math.abs(targetValue - currentValue);
+          valueChanges[asset] = valueChange;
+          
+          // Fee is charged on the value being swapped
+          if (targetValue > currentValue) {
+            // Buying this asset - fee on purchase
+            totalFees += valueChange * TRADING_FEE;
+          }
+        });
+        
+        // Deduct total fees from portfolio value
+        totalValue -= totalFees;
+        
+        // Now rebalance with reduced total value
         assets.forEach(asset => {
           const targetValue = totalValue * (targetAllocations[asset] / 100);
           holdings[asset] = targetValue / CRYPTO_DATA[asset][i];
         });
+        
+        console.log(`\nTrading fees deducted: $${totalFees.toFixed(2)}`);
+        console.log(`New total value after fees: $${totalValue.toFixed(2)}`);
         
         console.log('\nAFTER rebalancing:');
         assets.forEach(asset => {
@@ -647,6 +678,9 @@ const AutoFolio = () => {
                           <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                           <span className="text-yellow-400 font-semibold">{rebalancePoints.length} Rebalances</span>
                           <span className="text-gray-500 ml-1">@ {deviationThreshold}% threshold</span>
+                        </div>
+                        <div className="text-xs text-orange-400 mb-3">
+                          💸 Est. trading fees: ~${(rebalancePoints.length * simulationData[simulationData.length - 1].autoFolio * 0.003).toFixed(0)} (0.3% per swap)
                         </div>
                         <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
                           {rebalancePoints.slice(0, 5).map((point, idx) => (
