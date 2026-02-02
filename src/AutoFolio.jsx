@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { WalletButton, useWallet } from './WalletConnection';
+import PortfolioCreate from './PortfolioCreate';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot } from 'recharts';
 
 // Generate mean-reverting crypto data where rebalancing wins
@@ -100,6 +102,7 @@ const AutoFolio = () => {
   const [selectedAssets, setSelectedAssets] = useState(['BTC', 'TSLA', 'SOL', 'GOLD', 'USDC']);
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
+  const { wallet, connected } = useWallet();
   
   // Available assets (in real app, this comes from API)
   const availableAssets = {
@@ -291,6 +294,10 @@ const AutoFolio = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-8" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+      <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
+        <WalletButton />
+      </div>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Orbitron:wght@700;900&display=swap');
         
@@ -738,6 +745,15 @@ const AutoFolio = () => {
           </div>
         </div>
 
+        {/* REAL PORTFOLIO CREATE */}
+        {connected && (
+          <div className="max-w-7xl mx-auto px-8 mt-12 pb-12">
+            <h2 className="text-2xl font-bold mb-6 text-cyan-400">
+              🔐 Create Real Portfolio
+            </h2>
+            <PortfolioCreate />
+          </div>
+        )}
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
             📊 Interactive demo with simulated market scenarios • Production version will integrate real-time price feeds via Jupiter
