@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import AutoFolio from './AutoFolio.jsx'
+import AutoFolio from './AutoFolio.js'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
