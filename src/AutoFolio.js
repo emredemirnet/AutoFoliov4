@@ -168,17 +168,9 @@ const AutoFolio = () => {
       });
 
       if (needsRebalancing && i > 0) {
-        // Log before rebalancing
         console.log(`\n=== REBALANCE TRIGGERED on Day ${i} ===`);
         console.log('Total Portfolio Value: $' + totalValue.toFixed(2));
-        console.log('\nBEFORE rebalancing:');
-        assets.forEach(asset => {
-          const currentPercent = (currentAllocations[asset] / totalValue) * 100;
-          const targetPercent = targetAllocations[asset];
-          console.log(`${asset}: $${currentAllocations[asset].toFixed(2)} (${currentPercent.toFixed(2)}% - target: ${targetPercent}%)`);
-        });
         
-        // Log what's happening
         const changes = [];
         assets.forEach(asset => {
           const currentPercent = (currentAllocations[asset] / totalValue) * 100;
@@ -198,7 +190,6 @@ const AutoFolio = () => {
         const TRADING_FEE = 0.003; // 0.3% Jupiter swap fee
         let totalFees = 0;
         
-        // Calculate how much value needs to be moved for each asset
         const valueChanges = {};
         assets.forEach(asset => {
           const currentValue = currentAllocations[asset];
@@ -206,30 +197,16 @@ const AutoFolio = () => {
           const valueChange = Math.abs(targetValue - currentValue);
           valueChanges[asset] = valueChange;
           
-          // Fee is charged on the value being swapped
           if (targetValue > currentValue) {
-            // Buying this asset - fee on purchase
             totalFees += valueChange * TRADING_FEE;
           }
         });
         
-        // Deduct total fees from portfolio value
         totalValue -= totalFees;
         
-        // Now rebalance with reduced total value
         assets.forEach(asset => {
           const targetValue = totalValue * (targetAllocations[asset] / 100);
           holdings[asset] = targetValue / CRYPTO_DATA[asset][i];
-        });
-        
-        console.log(`\nTrading fees deducted: $${totalFees.toFixed(2)}`);
-        console.log(`New total value after fees: $${totalValue.toFixed(2)}`);
-        
-        console.log('\nAFTER rebalancing:');
-        assets.forEach(asset => {
-          const newValue = holdings[asset] * CRYPTO_DATA[asset][i];
-          const newPercent = (newValue / totalValue) * 100;
-          console.log(`${asset}: $${newValue.toFixed(2)} (${newPercent.toFixed(2)}%)`);
         });
         
         const monthIndex = Math.round((i / 364) * 12);
@@ -294,10 +271,13 @@ const AutoFolio = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-8" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+      
+      {/* HEADER - WALLET BUTTON */}
       <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
         <WalletButton />
       </div>
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Orbitron:wght@700;900&display=swap');
         
@@ -747,13 +727,14 @@ const AutoFolio = () => {
 
         {/* REAL PORTFOLIO CREATE */}
         {connected && (
-          <div className="max-w-7xl mx-auto px-8 mt-12 pb-12">
+          <div className="max-w-7xl mx-auto mt-12 pb-12">
             <h2 className="text-2xl font-bold mb-6 text-cyan-400">
               🔐 Create Real Portfolio
             </h2>
             <PortfolioCreate />
           </div>
         )}
+
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
             📊 Interactive demo with simulated market scenarios • Production version will integrate real-time price feeds via Jupiter
