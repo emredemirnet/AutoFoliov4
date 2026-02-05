@@ -144,6 +144,7 @@ Required:
 Optional:
 - `PORT` - Server port (default: 3001)
 - `NODE_ENV` - Environment (production/development)
+Updated: February 5, 2026 - v2.0
 
 ## Tech Stack
 
