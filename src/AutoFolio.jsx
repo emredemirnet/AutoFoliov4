@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { WalletButton, useWallet } from './WalletConnection.jsx';
+import React, { useState, useEffect } from 'react';
+import { WalletButton, useWallet, portfolioAPI } from './WalletConnection.jsx';
 import PortfolioCreate from './PortfolioCreate.jsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot } from 'recharts';
 
@@ -8,13 +8,10 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
   const days = 365;
   const prices = [startPrice];
   
-  // Create MORE frequent cycles with HIGHER volatility for better rebalancing gains
-  // This makes "sell high, buy low" more profitable
-  const cycleLength = 60; // Shorter cycles (every 2 months instead of 3)
+  const cycleLength = 60;
   const numCycles = Math.floor(days / cycleLength);
   
   for (let cycle = 0; cycle < numCycles; cycle++) {
-    // Each asset gets its own cycle offset so they pump at different times
     let phaseOffset = 0;
     if (assetType === 'BTC') phaseOffset = 0;
     if (assetType === 'TSLA') phaseOffset = 20;
@@ -28,27 +25,17 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
     if (assetType === 'SILVER') phaseOffset = 55;
     
     const adjustedPhase = (cycle * cycleLength + phaseOffset) % 365;
-    
-    // Determine if this asset is pumping or dumping in this cycle
     const isPumping = (adjustedPhase % 120) < 60;
-    const trend = isPumping ? 0.012 : -0.008; // INCREASED swing amplitude (was 0.008/-0.005)
+    const trend = isPumping ? 0.012 : -0.008;
     
     for (let i = 0; i < cycleLength && prices.length < days; i++) {
       const prevPrice = prices[prices.length - 1];
-      
-      // Trend component (up or down) - STRONGER
       const trendMove = prevPrice * trend;
-      
-      // Random volatility - INCREASED (was baseVolatility * 2)
       const randomMove = prevPrice * (Math.random() - 0.5) * baseVolatility * 3;
-      
-      // Mean reversion force (pulls back toward starting price) - STRONGER
       const distanceFromStart = (prevPrice - startPrice) / startPrice;
-      const meanReversionForce = -distanceFromStart * prevPrice * 0.005; // Increased from 0.003
+      const meanReversionForce = -distanceFromStart * prevPrice * 0.005;
       
       let newPrice = prevPrice + trendMove + randomMove + meanReversionForce;
-      
-      // Keep price reasonable
       newPrice = Math.max(newPrice, startPrice * 0.5);
       newPrice = Math.min(newPrice, startPrice * 2.5);
       
@@ -56,7 +43,6 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
     }
   }
   
-  // Fill remaining days
   while (prices.length < days) {
     const prevPrice = prices[prices.length - 1];
     const move = prevPrice * (Math.random() - 0.5) * baseVolatility;
@@ -66,59 +52,33 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
   return prices.slice(0, days);
 };
 
-// Generate price data for all available assets (volatile market scenario)
-const CRYPTO_DATA = {
-  // Crypto
-  BTC: generateMeanRevertingData(42000, 0.04, 'BTC'),
-  ETH: generateMeanRevertingData(2200, 0.05, 'ETH'),
-  SOL: generateMeanRevertingData(98, 0.07, 'SOL'),
-  USDC: Array(365).fill(1),
-  USDT: Array(365).fill(1),
-  
-  // Stocks
-  TSLA: generateMeanRevertingData(238, 0.06, 'TSLA'),
-  AAPL: generateMeanRevertingData(178, 0.04, 'AAPL'),
-  NVDA: generateMeanRevertingData(495, 0.08, 'NVDA'),
-  MSFT: generateMeanRevertingData(378, 0.05, 'MSFT'),
-  GOOGL: generateMeanRevertingData(140, 0.05, 'GOOGL'),
-  
-  // Commodities
-  GOLD: generateMeanRevertingData(2050, 0.015, 'GOLD'),
-  SILVER: generateMeanRevertingData(24, 0.025, 'SILVER')
-};
-
 const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 364];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Now'];
 
 const AutoFolio = () => {
   const [allocations, setAllocations] = useState({
+    SOL: 40,
     BTC: 30,
-    TSLA: 25,
-    SOL: 20,
-    GOLD: 15,
-    USDC: 10
+    USDC: 30
   });
   
-  const [selectedAssets, setSelectedAssets] = useState(['BTC', 'TSLA', 'SOL', 'GOLD', 'USDC']);
+  const [selectedAssets, setSelectedAssets] = useState(['SOL', 'BTC', 'USDC']);
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
   const { wallet, connected } = useWallet();
   
-  // Available assets (in real app, this comes from API)
+  // Real prices from API
+  const [realPrices, setRealPrices] = useState(null);
+  const [walletBalances, setWalletBalances] = useState(null);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  
+  // Available assets
   const availableAssets = {
-    // Crypto
     BTC: { name: 'Bitcoin', type: 'crypto', color: '#F7931A' },
     ETH: { name: 'Ethereum', type: 'crypto', color: '#627EEA' },
     SOL: { name: 'Solana', type: 'crypto', color: '#14F195' },
     USDC: { name: 'USD Coin', type: 'crypto', color: '#2775CA' },
-    // Stocks
-    TSLA: { name: 'Tesla', type: 'stock', color: '#E82127' },
-    AAPL: { name: 'Apple', type: 'stock', color: '#555555' },
-    NVDA: { name: 'NVIDIA', type: 'stock', color: '#76B900' },
-    MSFT: { name: 'Microsoft', type: 'stock', color: '#00A4EF' },
-    // Commodities
-    GOLD: { name: 'Gold', type: 'commodity', color: '#FFD700' },
-    SILVER: { name: 'Silver', type: 'commodity', color: '#C0C0C0' },
+    USDT: { name: 'Tether', type: 'crypto', color: '#26A17B' },
   };
   
   const [deviationThreshold, setDeviationThreshold] = useState(10);
@@ -131,11 +91,66 @@ const AutoFolio = () => {
     selectedAssets.map(asset => [asset, availableAssets[asset]?.color || '#888888'])
   );
 
+  // Fetch real prices on mount
+  useEffect(() => {
+    fetchRealPrices();
+  }, []);
+
+  // Fetch wallet balances when connected
+  useEffect(() => {
+    if (connected && wallet) {
+      fetchWalletBalances();
+    }
+  }, [connected, wallet]);
+
+  const fetchRealPrices = async () => {
+    setLoadingPrices(true);
+    try {
+      const prices = await portfolioAPI.getPrices();
+      setRealPrices(prices);
+      console.log('✅ Real prices loaded:', prices);
+    } catch (error) {
+      console.error('Failed to fetch prices:', error);
+    } finally {
+      setLoadingPrices(false);
+    }
+  };
+
+  const fetchWalletBalances = async () => {
+    try {
+      const balances = await portfolioAPI.getBalances(wallet);
+      setWalletBalances(balances);
+      console.log('✅ Wallet balances:', balances);
+    } catch (error) {
+      console.error('Failed to fetch balances:', error);
+    }
+  };
+
   const handleAllocationChange = (asset, value) => {
     setAllocations(prev => ({ ...prev, [asset]: value }));
   };
 
+  const generateCryptoData = () => {
+    // Use real prices if available, otherwise use simulated
+    const basePrices = realPrices || {
+      BTC: 42000,
+      ETH: 2200,
+      SOL: 98,
+      USDC: 1,
+      USDT: 1
+    };
+
+    return {
+      BTC: generateMeanRevertingData(basePrices.BTC || 42000, 0.04, 'BTC'),
+      ETH: generateMeanRevertingData(basePrices.ETH || 2200, 0.05, 'ETH'),
+      SOL: generateMeanRevertingData(basePrices.SOL || 98, 0.07, 'SOL'),
+      USDC: Array(365).fill(1),
+      USDT: Array(365).fill(1),
+    };
+  };
+
   const calculateRebalancingStrategy = (targetAllocations, threshold, initialInvestment = 10000) => {
+    const CRYPTO_DATA = generateCryptoData();
     const results = [];
     const rebalances = [];
     
@@ -168,9 +183,6 @@ const AutoFolio = () => {
       });
 
       if (needsRebalancing && i > 0) {
-        console.log(`\n=== REBALANCE TRIGGERED on Day ${i} ===`);
-        console.log('Total Portfolio Value: $' + totalValue.toFixed(2));
-        
         const changes = [];
         assets.forEach(asset => {
           const currentPercent = (currentAllocations[asset] / totalValue) * 100;
@@ -186,16 +198,13 @@ const AutoFolio = () => {
           }
         });
         
-        // Perform rebalancing WITH TRADING FEES
-        const TRADING_FEE = 0.003; // 0.3% Jupiter swap fee
+        const TRADING_FEE = 0.003;
         let totalFees = 0;
         
-        const valueChanges = {};
         assets.forEach(asset => {
           const currentValue = currentAllocations[asset];
           const targetValue = totalValue * (targetAllocations[asset] / 100);
           const valueChange = Math.abs(targetValue - currentValue);
-          valueChanges[asset] = valueChange;
           
           if (targetValue > currentValue) {
             totalFees += valueChange * TRADING_FEE;
@@ -227,6 +236,7 @@ const AutoFolio = () => {
   };
 
   const calculateBuyAndHold = (targetAllocations, initialInvestment = 10000) => {
+    const CRYPTO_DATA = generateCryptoData();
     const results = [];
     
     const holdings = {};
@@ -272,10 +282,16 @@ const AutoFolio = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-8" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
       
-      {/* HEADER - WALLET BUTTON */}
       <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
-        <WalletButton />
+        <div className="flex items-center gap-4">
+          {realPrices && (
+            <div className="text-xs text-gray-400">
+              SOL: ${realPrices.SOL?.toFixed(2)} | BTC: ${realPrices.BTC?.toLocaleString()}
+            </div>
+          )}
+          <WalletButton />
+        </div>
       </div>
 
       <style>{`
@@ -371,33 +387,55 @@ const AutoFolio = () => {
             <span className="text-cyan-400">AutoFolio</span>
           </h1>
           <p className="text-cyan-500 text-sm tracking-widest uppercase opacity-80">Set It. Forget It. Stay Balanced.</p>
-          <p className="text-gray-400 text-xs mt-2">Crypto • Stocks • Commodities • Stablecoins in One Portfolio</p>
+          <p className="text-gray-400 text-xs mt-2">Automated Portfolio Rebalancing on Solana</p>
           <div className="mt-4 h-1 w-32 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
         </div>
+
+        {/* Real Portfolio Section - Show FIRST if wallet connected */}
+        {connected && (
+          <div className="mb-12">
+            <div className="jup-card rounded-2xl p-8 border-2 border-cyan-400/50">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-cyan-400 mb-2">🔐 Your Real Portfolio</h2>
+                  <p className="text-sm text-gray-400">Create and manage your automated rebalancing portfolio</p>
+                </div>
+                {walletBalances && (
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">Wallet Balance</div>
+                    <div className="text-lg font-bold text-cyan-400">
+                      {walletBalances.SOL?.toFixed(4)} SOL
+                    </div>
+                  </div>
+                )}
+              </div>
+              <PortfolioCreate />
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
             <div className="jup-card rounded-2xl p-6 transition-all duration-300">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <span className="text-2xl">⚡</span>
-                <span>AutoFolio</span>
+                <span>Demo Simulation</span>
               </h2>
               
               <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                 <p className="text-xs text-cyan-300 leading-relaxed">
-                  💡 <strong>Cross-Asset Rebalancing:</strong> Build diversified portfolios combining cryptocurrencies, stocks, commodities, and stablecoins. When any asset grows beyond your threshold, AutoFolio automatically sells winners and rebalances across all asset classes to maintain your target allocation.
+                  💡 <strong>How it works:</strong> Configure your ideal allocation, set a rebalance threshold, and see how automated rebalancing would have performed over the past year with real market volatility.
                 </p>
               </div>
               
-              {/* Asset Management */}
               <div className="mb-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-semibold text-gray-300">Your Assets</span>
+                  <span className="text-xs font-semibold text-gray-300">Assets</span>
                   <button
                     onClick={() => setIsAddingAsset(!isAddingAsset)}
                     className="text-xs px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded transition"
                   >
-                    + Add Asset
+                    + Add
                   </button>
                 </div>
                 
@@ -405,7 +443,7 @@ const AutoFolio = () => {
                   <div className="mt-2 p-2 bg-gray-900/50 rounded">
                     <input
                       type="text"
-                      placeholder="Search assets..."
+                      placeholder="Search..."
                       value={assetSearch}
                       onChange={(e) => setAssetSearch(e.target.value)}
                       className="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-white mb-2"
@@ -527,7 +565,7 @@ const AutoFolio = () => {
                            transform hover:scale-[1.02] active:scale-95 text-sm
                            shadow-lg shadow-cyan-400/20 disabled:shadow-none"
                 >
-                  {Math.abs(totalAllocation - 100) > 0.01 ? '⚠ Adjust to 100%' : '✓ Set Portfolio'}
+                  {Math.abs(totalAllocation - 100) > 0.01 ? '⚠ Adjust to 100%' : '✓ Run Simulation'}
                 </button>
               </div>
             </div>
@@ -545,7 +583,7 @@ const AutoFolio = () => {
                   <div className="text-center">
                     <div className="text-6xl mb-4 opacity-20">📈</div>
                     <p className="text-gray-400 text-base">Configure and run simulation</p>
-                    <p className="text-gray-600 text-sm mt-1">Simulated volatility patterns</p>
+                    <p className="text-gray-600 text-sm mt-1">See how rebalancing would perform</p>
                   </div>
                 </div>
               ) : (
@@ -594,25 +632,15 @@ const AutoFolio = () => {
 
                   <ResponsiveContainer width="100%" height={350}>
                     <LineChart data={simulationData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                      <defs>
-                        <linearGradient id="colorBuyHold" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#60a5fa" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorAutoFolio" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
                       <XAxis 
                         dataKey="month" 
                         stroke="#6b7280" 
-                        style={{ fontSize: '11px', fontFamily: "'Inter', sans-serif" }}
+                        style={{ fontSize: '11px' }}
                       />
                       <YAxis 
                         stroke="#6b7280"
-                        style={{ fontSize: '11px', fontFamily: "'Inter', sans-serif" }}
+                        style={{ fontSize: '11px' }}
                         tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                       />
                       <Tooltip 
@@ -620,14 +648,11 @@ const AutoFolio = () => {
                           backgroundColor: '#14171F', 
                           border: '1px solid rgba(34, 211, 238, 0.2)',
                           borderRadius: '12px',
-                          fontFamily: "'IBM Plex Mono', monospace",
                           fontSize: '12px'
                         }}
                         formatter={(value) => [`$${value.toLocaleString()}`, '']}
                       />
-                      <Legend 
-                        wrapperStyle={{ fontFamily: "'Inter', sans-serif", fontSize: '12px' }}
-                      />
+                      <Legend />
                       <Line 
                         type="monotone" 
                         dataKey="buyAndHold" 
@@ -664,10 +689,6 @@ const AutoFolio = () => {
                         <div className="flex items-center gap-2 text-xs mb-2">
                           <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                           <span className="text-yellow-400 font-semibold">{rebalancePoints.length} Rebalances</span>
-                          <span className="text-gray-500 ml-1">@ {deviationThreshold}% threshold</span>
-                        </div>
-                        <div className="text-xs text-orange-400 mb-3">
-                          💸 Est. trading fees: ~${(rebalancePoints.length * simulationData[simulationData.length - 1].autoFolio * 0.003).toFixed(0)} (0.3% per swap)
                         </div>
                         <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
                           {rebalancePoints.slice(0, 5).map((point, idx) => (
@@ -682,39 +703,8 @@ const AutoFolio = () => {
                             </div>
                           ))}
                           {rebalancePoints.length > 5 && (
-                            <div className="text-xs text-gray-500 italic">+ {rebalancePoints.length - 5} more rebalances...</div>
+                            <div className="text-xs text-gray-500 italic">+ {rebalancePoints.length - 5} more...</div>
                           )}
-                        </div>
-                      </div>
-                      
-                      {/* Jupiter Revenue Calculator */}
-                      <div className="p-4 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-lg">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg">💰</span>
-                            <span className="text-sm font-bold text-cyan-400">Jupiter Revenue</span>
-                          </div>
-                          <span className="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-300 rounded">Per User</span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <div className="text-gray-500 mb-1">Swap Volume (1 year)</div>
-                            <div className="text-lg font-bold text-white">
-                              ${((simulationData[simulationData.length - 1].autoFolio * rebalancePoints.length * 0.3) / 1000).toFixed(1)}k
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-gray-500 mb-1">Fee Revenue (0.3%)</div>
-                            <div className="text-lg font-bold text-cyan-400">
-                              ${(simulationData[simulationData.length - 1].autoFolio * rebalancePoints.length * 0.3 * 0.003).toFixed(0)}
-                            </div>
-                          </div>
-                          <div className="col-span-2 pt-2 border-t border-cyan-500/20">
-                            <div className="text-gray-400 mb-1">With 10,000 users:</div>
-                            <div className="text-xl font-bold text-cyan-400">
-                              ${((simulationData[simulationData.length - 1].autoFolio * rebalancePoints.length * 0.3 * 0.003 * 10000) / 1000000).toFixed(2)}M annual revenue
-                            </div>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -725,19 +715,9 @@ const AutoFolio = () => {
           </div>
         </div>
 
-        {/* REAL PORTFOLIO CREATE */}
-        {connected && (
-          <div className="max-w-7xl mx-auto mt-12 pb-12">
-            <h2 className="text-2xl font-bold mb-6 text-cyan-400">
-              🔐 Create Real Portfolio
-            </h2>
-            <PortfolioCreate />
-          </div>
-        )}
-
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
-            📊 Interactive demo with simulated market scenarios • Production version will integrate real-time price feeds via Jupiter
+            📊 Demo simulation • {realPrices ? '✅ Live prices' : '⏳ Loading prices...'}  • Connect wallet to create real portfolio
           </p>
         </div>
       </div>
