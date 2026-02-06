@@ -453,8 +453,8 @@ const AutoFolio = ({ presetStrategy }) => {
           <div className="mt-4 h-1 w-32 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
         </div>
 
-        {/* Real Portfolio Section - Show FIRST if wallet connected */}
-        {connected && (
+        {/* Real Portfolio Section - Show if wallet connected */}
+        {connected ? (
           <div className="mb-12">
             <div className="jup-card rounded-2xl p-8 border-2 border-cyan-400/50">
               <div className="flex items-center justify-between mb-6">
@@ -479,10 +479,8 @@ const AutoFolio = ({ presetStrategy }) => {
               <PortfolioCreate />
             </div>
           </div>
-        )}
-
-        {/* Simulation Section - ONLY show when wallet NOT connected */}
-        {!connected && (
+        ) : (
+          /* Simulation Section - Show if wallet NOT connected */
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
             <div className="jup-card rounded-2xl p-6 transition-all duration-300">
@@ -787,7 +785,7 @@ const AutoFolio = ({ presetStrategy }) => {
           </div>
         </div>
         )}
-        {/* End of Simulation Section */}
+        {/* End conditional rendering */}
 
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
