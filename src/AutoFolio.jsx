@@ -104,17 +104,25 @@ const AutoFolio = () => {
   }, [connected, wallet]);
 
   const fetchRealPrices = async () => {
-    setLoadingPrices(true);
-    try {
-      const prices = await portfolioAPI.getPrices();
+  setLoadingPrices(true);
+  try {
+    const prices = await portfolioAPI.getPrices();
+    
+    // Eğer fiyatlar 0 ise fallback kullan
+    if (!prices.SOL || prices.SOL === 0) {
+      console.log('⚠️ Backend returned 0 prices, using fallback');
+      setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
+    } else {
       setRealPrices(prices);
       console.log('✅ Real prices loaded:', prices);
-    } catch (error) {
-      console.error('Failed to fetch prices:', error);
-    } finally {
-      setLoadingPrices(false);
     }
-  };
+  } catch (error) {
+    console.error('Failed to fetch prices:', error);
+    setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
+  } finally {
+    setLoadingPrices(false);
+  }
+};
 
   const fetchWalletBalances = async () => {
     try {
