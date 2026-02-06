@@ -40,7 +40,7 @@ const Dashboard = () => {
 
       if (response.ok) {
         alert('Portfolio deleted successfully!');
-        loadPortfolios(); // Reload list
+        loadPortfolios();
       } else {
         alert('Failed to delete portfolio');
       }
@@ -48,6 +48,91 @@ const Dashboard = () => {
       console.error('Error deleting portfolio:', error);
       alert('Error deleting portfolio');
     }
+  };
+
+  // Generate chart data points starting from portfolio creation date
+  const getChartData = (portfolio) => {
+    const createdAt = portfolio.created_at ? new Date(portfolio.created_at) : new Date();
+    const now = new Date();
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Generate 5 data points from creation to 3 months in the future
+    const points = [];
+    const totalDays = 90; // 3 months projection
+    const daysSinceCreation = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
+    
+    // Starting value
+    const startValue = 1000;
+    let currentValue = startValue;
+    
+    // Point 1: Creation date
+    const formatDate = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
+    
+    points.push({
+      date: formatDate(createdAt),
+      value: startValue,
+      rebalance: false
+    });
+
+    // Generate intermediate points
+    const intervals = [
+      { daysFromStart: Math.min(daysSinceCreation, 15), rebalance: daysSinceCreation >= 15 },
+      { daysFromStart: Math.min(daysSinceCreation, 30), rebalance: false },
+      { daysFromStart: Math.min(daysSinceCreation, 45), rebalance: daysSinceCreation >= 45 },
+      { daysFromStart: Math.min(daysSinceCreation, 60), rebalance: false },
+    ];
+
+    // Simulate some growth
+    let rebalanceCount = 0;
+    intervals.forEach((interval) => {
+      if (interval.daysFromStart > 0) {
+        const d = new Date(createdAt);
+        d.setDate(d.getDate() + interval.daysFromStart);
+        
+        // Only add if date is not in the future
+        if (d <= now) {
+          const dailyReturn = 0.002 + (Math.random() * 0.003); // 0.2-0.5% daily
+          currentValue = currentValue * (1 + dailyReturn * interval.daysFromStart / intervals.length);
+          
+          if (interval.rebalance) {
+            rebalanceCount++;
+          }
+          
+          points.push({
+            date: formatDate(d),
+            value: Math.round(currentValue * 100) / 100,
+            rebalance: interval.rebalance
+          });
+        }
+      }
+    });
+
+    // Add today's point if portfolio is at least 1 day old
+    if (daysSinceCreation >= 1) {
+      currentValue = currentValue * (1 + 0.003 * Math.max(1, daysSinceCreation / 10));
+      points.push({
+        date: 'Today',
+        value: Math.round(currentValue * 100) / 100,
+        rebalance: false
+      });
+    }
+
+    // Remove duplicate dates
+    const uniquePoints = [];
+    const seenDates = new Set();
+    for (const point of points) {
+      if (!seenDates.has(point.date)) {
+        seenDates.add(point.date);
+        uniquePoints.push(point);
+      }
+    }
+
+    return {
+      chartData: uniquePoints,
+      currentValue: currentValue,
+      gain: ((currentValue - startValue) / startValue * 100),
+      rebalanceCount: rebalanceCount
+    };
   };
 
   if (!connected) {
@@ -94,122 +179,125 @@ const Dashboard = () => {
           </div>
         ) : (
           <div className="space-y-6">
-            {portfolios.map((portfolio) => (
-              <div
-                key={portfolio.id}
-                className="bg-gray-800/50 border border-cyan-400/30 rounded-xl p-6"
-              >
-                <h3 className="text-2xl font-bold text-cyan-400 mb-4">
-                  {portfolio.name}
-                </h3>
-                <div className="text-sm text-gray-400 mb-4">
-                  Threshold: {portfolio.threshold}%
-                </div>
+            {portfolios.map((portfolio) => {
+              const { chartData, currentValue, gain, rebalanceCount } = getChartData(portfolio);
+              const rebalancePointsData = chartData.filter(p => p.rebalance);
+              
+              return (
+                <div
+                  key={portfolio.id}
+                  className="bg-gray-800/50 border border-cyan-400/30 rounded-xl p-6"
+                >
+                  <h3 className="text-2xl font-bold text-cyan-400 mb-4">
+                    {portfolio.name}
+                  </h3>
+                  <div className="text-sm text-gray-400 mb-4">
+                    Threshold: {portfolio.threshold}%
+                    {portfolio.created_at && (
+                      <span className="ml-4">
+                        Created: {new Date(portfolio.created_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
 
-                {/* PERFORMANCE CHART */}
-                <div className="mb-6 bg-gray-900/50 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-sm font-semibold text-gray-300">📈 Performance</h4>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-xs text-gray-500">Starting Value</div>
-                        <div className="text-sm font-bold text-gray-400">$1,000.00</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-gray-500">Current Value</div>
-                        <div className="text-sm font-bold text-cyan-400">$1,235.40</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xs text-gray-500">Gain</div>
-                        <div className="text-sm font-bold text-green-400">+23.5%</div>
+                  {/* PERFORMANCE CHART */}
+                  <div className="mb-6 bg-gray-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-semibold text-gray-300">📈 Performance</h4>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500">Starting Value</div>
+                          <div className="text-sm font-bold text-gray-400">$1,000.00</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500">Current Value</div>
+                          <div className="text-sm font-bold text-cyan-400">${currentValue.toFixed(2)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-gray-500">Gain</div>
+                          <div className={`text-sm font-bold ${gain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  
-                  <ResponsiveContainer width="100%" height={150}>
-                    <LineChart data={[
-                      { date: 'Jan 1', value: 1000 },
-                      { date: 'Jan 15', value: 1050, rebalance: true },
-                      { date: 'Feb 1', value: 1120 },
-                      { date: 'Feb 15', value: 1180, rebalance: true },
-                      { date: 'Mar 1', value: 1235 }
-                    ]}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
-                      <XAxis 
-                        dataKey="date" 
-                        stroke="#6b7280" 
-                        style={{ fontSize: '10px' }}
-                      />
-                      <YAxis 
-                        stroke="#6b7280"
-                        style={{ fontSize: '10px' }}
-                        tickFormatter={(value) => `$${value}`}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#14171F', 
-                          border: '1px solid rgba(34, 211, 238, 0.2)',
-                          borderRadius: '8px',
-                          fontSize: '11px'
-                        }}
-                        formatter={(value) => [`$${value}`, 'Value']}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke="#22d3ee" 
-                        strokeWidth={2}
-                        dot={false}
-                      />
-                      {[
-                        { date: 'Jan 15', value: 1050 },
-                        { date: 'Feb 15', value: 1180 }
-                      ].map((point, idx) => (
-                        <ReferenceDot
-                          key={idx}
-                          x={point.date}
-                          y={point.value}
-                          r={4}
-                          fill="#fbbf24"
-                          stroke="#f59e0b"
-                          strokeWidth={2}
+                    
+                    <ResponsiveContainer width="100%" height={150}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="#6b7280" 
+                          style={{ fontSize: '10px' }}
                         />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
+                        <YAxis 
+                          stroke="#6b7280"
+                          style={{ fontSize: '10px' }}
+                          tickFormatter={(value) => `$${value}`}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#14171F', 
+                            border: '1px solid rgba(34, 211, 238, 0.2)',
+                            borderRadius: '8px',
+                            fontSize: '11px'
+                          }}
+                          formatter={(value) => [`$${value}`, 'Value']}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="value" 
+                          stroke="#22d3ee" 
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        {rebalancePointsData.map((point, idx) => (
+                          <ReferenceDot
+                            key={idx}
+                            x={point.date}
+                            y={point.value}
+                            r={4}
+                            fill="#fbbf24"
+                            stroke="#f59e0b"
+                            strokeWidth={2}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    
+                    <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
+                      <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                      <span>Rebalance points ({rebalanceCount} total)</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {portfolio.targets.map((target) => (
+                      <div key={target.symbol} className="flex justify-between">
+                        <span>{target.symbol}</span>
+                        <span className="text-cyan-400">{target.percent}%</span>
+                      </div>
+                    ))}
+                  </div>
                   
-                  <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-                    <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-                    <span>Rebalance points (2 total)</span>
+                  {/* ACTIONS */}
+                  <div className="mt-6 pt-4 border-t border-gray-700 flex gap-3">
+                    <button
+                      onClick={() => alert('Edit feature coming soon! You will be able to adjust allocations and threshold.')}
+                      className="flex-1 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg font-semibold transition"
+                    >
+                      ✏️ Edit Portfolio
+                    </button>
+                    <button
+                      onClick={() => deletePortfolio(portfolio.id, portfolio.name)}
+                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-semibold transition"
+                    >
+                      🗑️ Delete
+                    </button>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  {portfolio.targets.map((target) => (
-                    <div key={target.symbol} className="flex justify-between">
-                      <span>{target.symbol}</span>
-                      <span className="text-cyan-400">{target.percent}%</span>
-                    </div>
-                  ))}
-                </div>
-                
-                {/* ACTIONS */}
-                <div className="mt-6 pt-4 border-t border-gray-700 flex gap-3">
-                  <button
-                    onClick={() => alert('Edit feature coming soon! You will be able to adjust allocations and threshold.')}
-                    className="flex-1 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg font-semibold transition"
-                  >
-                    ✏️ Edit Portfolio
-                  </button>
-                  <button
-                    onClick={() => deletePortfolio(portfolio.id, portfolio.name)}
-                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-semibold transition"
-                  >
-                    🗑️ Delete
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
