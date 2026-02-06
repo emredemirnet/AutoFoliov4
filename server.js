@@ -22,7 +22,7 @@ const pool = new Pool({
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
 
-// Price cache - update every 10 minutes
+// Price cache
 let priceCache = {
   SOL: 150,
   BTC: 95000,
@@ -33,6 +33,20 @@ let priceCache = {
 let lastPriceUpdate = 0;
 const PRICE_CACHE_DURATION = 10 * 60 * 1000;
 
+// Historical price cache (refresh every 6 hours)
+let historicalCache = {};
+let lastHistoricalUpdate = 0;
+const HISTORICAL_CACHE_DURATION = 6 * 60 * 60 * 1000;
+
+// CoinGecko coin ID mapping
+const COINGECKO_IDS = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  SOL: 'solana',
+  USDC: 'usd-coin',
+  USDT: 'tether'
+};
+
 async function updatePrices() {
   const now = Date.now();
   if (now - lastPriceUpdate < PRICE_CACHE_DURATION) {
@@ -41,13 +55,75 @@ async function updatePrices() {
   }
 
   try {
-    console.log('✅ Using fallback prices');
+    const ids = Object.values(COINGECKO_IDS).join(',');
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
+    const response = await fetch(url);
+    
+    if (response.ok) {
+      const data = await response.json();
+      priceCache = {
+        SOL: data['solana']?.usd || priceCache.SOL,
+        BTC: data['bitcoin']?.usd || priceCache.BTC,
+        ETH: data['ethereum']?.usd || priceCache.ETH,
+        USDC: data['usd-coin']?.usd || 1,
+        USDT: data['tether']?.usd || 1
+      };
+      console.log('✅ Live prices from CoinGecko:', priceCache);
+    } else {
+      console.log('⚠️ CoinGecko price fetch failed, using fallback');
+    }
+    
     lastPriceUpdate = now;
     return priceCache;
   } catch (error) {
-    console.error('Error updating prices:', error);
+    console.error('Error updating prices:', error.message);
+    lastPriceUpdate = now;
     return priceCache;
   }
+}
+
+// Fetch 365-day historical prices from CoinGecko
+async function fetchHistoricalPrices() {
+  const now = Date.now();
+  if (now - lastHistoricalUpdate < HISTORICAL_CACHE_DURATION && Object.keys(historicalCache).length > 0) {
+    console.log('Using cached historical prices');
+    return historicalCache;
+  }
+
+  console.log('📊 Fetching historical prices from CoinGecko...');
+  const result = {};
+
+  for (const [symbol, geckoId] of Object.entries(COINGECKO_IDS)) {
+    if (symbol === 'USDC' || symbol === 'USDT') {
+      result[symbol] = Array(366).fill(1);
+      continue;
+    }
+
+    try {
+      const url = `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart?vs_currency=usd&days=365&interval=daily`;
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const data = await response.json();
+        result[symbol] = data.prices.map(p => p[1]);
+        console.log(`  ✅ ${symbol}: ${result[symbol].length} data points`);
+      } else {
+        console.log(`  ⚠️ ${symbol}: CoinGecko returned ${response.status}`);
+        result[symbol] = null;
+      }
+      
+      // Rate limit: 2.5s between requests
+      await new Promise(resolve => setTimeout(resolve, 2500));
+    } catch (error) {
+      console.error(`  ❌ ${symbol}: ${error.message}`);
+      result[symbol] = null;
+    }
+  }
+
+  historicalCache = result;
+  lastHistoricalUpdate = now;
+  console.log('📊 Historical prices loaded');
+  return result;
 }
 
 async function initDatabase() {
@@ -91,6 +167,17 @@ app.get('/api/prices', async (req, res) => {
     res.json(prices);
   } catch (error) {
     res.json(priceCache);
+  }
+});
+
+// Historical prices endpoint
+app.get('/api/historical-prices', async (req, res) => {
+  try {
+    const data = await fetchHistoricalPrices();
+    res.json(data);
+  } catch (error) {
+    console.error('❌ Historical prices error:', error.message);
+    res.status(500).json({ error: 'Failed to fetch historical prices' });
   }
 });
 
@@ -214,5 +301,10 @@ app.listen(PORT, async () => {
   await initDatabase();
   await updatePrices();
   setInterval(updatePrices, PRICE_CACHE_DURATION);
+  
+  // Pre-fetch historical prices in background
+  fetchHistoricalPrices().catch(err => console.error('Historical fetch error:', err));
+  setInterval(() => fetchHistoricalPrices().catch(err => console.error('Historical fetch error:', err)), HISTORICAL_CACHE_DURATION);
+  
   console.log('⏰ Price updates scheduled');
 });
