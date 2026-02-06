@@ -22,67 +22,92 @@ const pool = new Pool({
 const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
 const connection = new Connection(SOLANA_RPC, 'confirmed');
 
-// Price cache
-let priceCache = {
-  SOL: 150,
-  BTC: 95000,
-  ETH: 3500,
-  USDC: 1,
-  USDT: 1
+// =============================================
+// JUPITER PRICE API - Live prices
+// =============================================
+
+// Solana token mint addresses for Jupiter
+const JUPITER_MINTS = {
+  SOL: 'So11111111111111111111111111111111111111112',
+  BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', // Wrapped BTC (Portal)
+  ETH: '7vfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs', // Wrapped ETH (Portal)
+  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+  JUP: 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+  BONK: 'DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263',
+  WIF: 'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm',
+  PYTH: 'HZ1JovNiVvGrGNiiYvEozEVgZ58xaU3RKwX8eACQBCt3',
+  RAY: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+  ORCA: 'orcaEKTdK7LKz57vaAYr9QeNsVEPfiu6QeMU1kektZE',
 };
+
+let priceCache = {};
 let lastPriceUpdate = 0;
-const PRICE_CACHE_DURATION = 10 * 60 * 1000;
+const PRICE_CACHE_DURATION = 60 * 1000; // 1 minute (Jupiter is fast)
 
-// Historical price cache (refresh every 6 hours)
-let historicalCache = {};
-let lastHistoricalUpdate = 0;
-const HISTORICAL_CACHE_DURATION = 6 * 60 * 60 * 1000;
-
-// CoinGecko coin ID mapping
-const COINGECKO_IDS = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  USDC: 'usd-coin',
-  USDT: 'tether'
-};
-
-async function updatePrices() {
+async function updatePricesFromJupiter() {
   const now = Date.now();
-  if (now - lastPriceUpdate < PRICE_CACHE_DURATION) {
-    console.log('Using cached prices');
+  if (now - lastPriceUpdate < PRICE_CACHE_DURATION && Object.keys(priceCache).length > 0) {
     return priceCache;
   }
 
   try {
-    const ids = Object.values(COINGECKO_IDS).join(',');
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
+    const mintIds = Object.values(JUPITER_MINTS).join(',');
+    const url = `https://api.jup.ag/price/v2?ids=${mintIds}`;
     const response = await fetch(url);
-    
+
     if (response.ok) {
       const data = await response.json();
-      priceCache = {
-        SOL: data['solana']?.usd || priceCache.SOL,
-        BTC: data['bitcoin']?.usd || priceCache.BTC,
-        ETH: data['ethereum']?.usd || priceCache.ETH,
-        USDC: data['usd-coin']?.usd || 1,
-        USDT: data['tether']?.usd || 1
-      };
-      console.log('✅ Live prices from CoinGecko:', priceCache);
+      const newCache = {};
+
+      for (const [symbol, mint] of Object.entries(JUPITER_MINTS)) {
+        const priceData = data.data?.[mint];
+        if (priceData && priceData.price) {
+          newCache[symbol] = parseFloat(priceData.price);
+        }
+      }
+
+      if (Object.keys(newCache).length > 0) {
+        priceCache = newCache;
+        console.log('✅ Jupiter live prices:', JSON.stringify(priceCache, null, 0));
+      } else {
+        console.log('⚠️ Jupiter returned empty data, keeping cache');
+      }
     } else {
-      console.log('⚠️ CoinGecko price fetch failed, using fallback');
+      console.log(`⚠️ Jupiter API returned ${response.status}`);
     }
-    
+
     lastPriceUpdate = now;
     return priceCache;
   } catch (error) {
-    console.error('Error updating prices:', error.message);
+    console.error('❌ Jupiter price error:', error.message);
     lastPriceUpdate = now;
     return priceCache;
   }
 }
 
-// Fetch 365-day historical prices from CoinGecko
+// =============================================
+// COINGECKO - Historical prices only (backtest)
+// =============================================
+
+const COINGECKO_IDS = {
+  BTC: 'bitcoin',
+  ETH: 'ethereum',
+  SOL: 'solana',
+  USDC: 'usd-coin',
+  USDT: 'tether',
+  JUP: 'jupiter-exchange-solana',
+  BONK: 'bonk',
+  WIF: 'dogwifcoin',
+  PYTH: 'pyth-network',
+  RAY: 'raydium',
+  ORCA: 'orca',
+};
+
+let historicalCache = {};
+let lastHistoricalUpdate = 0;
+const HISTORICAL_CACHE_DURATION = 6 * 60 * 60 * 1000; // 6 hours
+
 async function fetchHistoricalPrices() {
   const now = Date.now();
   if (now - lastHistoricalUpdate < HISTORICAL_CACHE_DURATION && Object.keys(historicalCache).length > 0) {
@@ -102,7 +127,7 @@ async function fetchHistoricalPrices() {
     try {
       const url = `https://api.coingecko.com/api/v3/coins/${geckoId}/market_chart?vs_currency=usd&days=365&interval=daily`;
       const response = await fetch(url);
-      
+
       if (response.ok) {
         const data = await response.json();
         result[symbol] = data.prices.map(p => p[1]);
@@ -111,8 +136,8 @@ async function fetchHistoricalPrices() {
         console.log(`  ⚠️ ${symbol}: CoinGecko returned ${response.status}`);
         result[symbol] = null;
       }
-      
-      // Rate limit: 2.5s between requests
+
+      // Rate limit: 2.5s between requests (free tier: 30 calls/min)
       await new Promise(resolve => setTimeout(resolve, 2500));
     } catch (error) {
       console.error(`  ❌ ${symbol}: ${error.message}`);
@@ -125,6 +150,10 @@ async function fetchHistoricalPrices() {
   console.log('📊 Historical prices loaded');
   return result;
 }
+
+// =============================================
+// DATABASE
+// =============================================
 
 async function initDatabase() {
   try {
@@ -154,23 +183,30 @@ async function initDatabase() {
   }
 }
 
+// =============================================
+// ROUTES
+// =============================================
+
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'AutoFolio Backend Running',
+    priceSource: 'Jupiter Price API V2',
+    historicalSource: 'CoinGecko',
     timestamp: new Date().toISOString()
   });
 });
 
+// Live prices from Jupiter
 app.get('/api/prices', async (req, res) => {
   try {
-    const prices = await updatePrices();
+    const prices = await updatePricesFromJupiter();
     res.json(prices);
   } catch (error) {
     res.json(priceCache);
   }
 });
 
-// Historical prices endpoint
+// Historical prices from CoinGecko (for backtest)
 app.get('/api/historical-prices', async (req, res) => {
   try {
     const data = await fetchHistoricalPrices();
@@ -181,12 +217,22 @@ app.get('/api/historical-prices', async (req, res) => {
   }
 });
 
+// Available tokens list
+app.get('/api/tokens', (req, res) => {
+  const tokens = Object.entries(JUPITER_MINTS).map(([symbol, mint]) => ({
+    symbol,
+    mint,
+    hasHistorical: !!COINGECKO_IDS[symbol]
+  }));
+  res.json(tokens);
+});
+
 app.get('/api/balances/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
     const pubkey = new PublicKey(walletAddress);
     const solBalance = await connection.getBalance(pubkey);
-    
+
     res.json({
       SOL: { balance: solBalance / 1e9 }
     });
@@ -197,7 +243,7 @@ app.get('/api/balances/:walletAddress', async (req, res) => {
 
 app.post('/api/portfolios', async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     const { wallet_address, name, threshold, targets } = req.body;
 
@@ -242,7 +288,7 @@ app.post('/api/portfolios', async (req, res) => {
 app.get('/api/portfolios/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
-    
+
     const result = await pool.query(
       `SELECT p.*, 
         json_agg(json_build_object('symbol', pt.token_symbol, 'percent', pt.target_percent)) as targets
@@ -283,12 +329,12 @@ app.get('/api/portfolios', async (req, res) => {
 app.delete('/api/portfolios/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     await pool.query(
       'UPDATE portfolios SET active = false WHERE id = $1',
       [id]
     );
-    
+
     console.log(`✅ Portfolio ${id} deleted`);
     res.json({ success: true, message: 'Portfolio deleted' });
   } catch (error) {
@@ -296,15 +342,21 @@ app.delete('/api/portfolios/:id', async (req, res) => {
   }
 });
 
+// =============================================
+// START SERVER
+// =============================================
+
 app.listen(PORT, async () => {
   console.log(`🚀 AutoFolio Backend running on port ${PORT}`);
   await initDatabase();
-  await updatePrices();
-  setInterval(updatePrices, PRICE_CACHE_DURATION);
-  
-  // Pre-fetch historical prices in background
+
+  // Fetch live prices from Jupiter
+  await updatePricesFromJupiter();
+  setInterval(updatePricesFromJupiter, PRICE_CACHE_DURATION);
+
+  // Fetch historical prices from CoinGecko in background
   fetchHistoricalPrices().catch(err => console.error('Historical fetch error:', err));
   setInterval(() => fetchHistoricalPrices().catch(err => console.error('Historical fetch error:', err)), HISTORICAL_CACHE_DURATION);
-  
-  console.log('⏰ Price updates scheduled');
+
+  console.log('⏰ Jupiter (live) + CoinGecko (historical) scheduled');
 });
