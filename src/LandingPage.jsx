@@ -158,13 +158,9 @@ const LandingPage = ({ onSelectStrategy, onCustomize }) => {
 
                 {/* Settings - Compact */}
                 <div className="mb-4 pb-4 border-b border-gray-700">
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="flex justify-between text-sm">
                     <span className="text-gray-400">Threshold:</span>
                     <span className="text-white font-bold">{strategy.threshold}%</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">Rebalances:</span>
-                    <span className="text-white font-bold">~{strategy.rebalancesPerYear}/year</span>
                   </div>
                 </div>
 
@@ -240,7 +236,16 @@ const LandingPage = ({ onSelectStrategy, onCustomize }) => {
               </div>
 
               <button
-                onClick={onCustomize}
+                onClick={() => onSelectStrategy({ 
+                  id: 'custom',
+                  name: 'Custom Portfolio',
+                  allocation: [
+                    { asset: 'SOL', percent: 40 },
+                    { asset: 'BTC', percent: 30 },
+                    { asset: 'USDC', percent: 30 }
+                  ],
+                  threshold: 10
+                })}
                 className="w-full py-3 rounded-xl font-bold bg-purple-500 hover:bg-purple-600 text-white transition-all duration-300 hover:scale-105"
               >
                 BUILD →
