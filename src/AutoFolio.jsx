@@ -419,12 +419,12 @@ const AutoFolio = () => {
             <div className="jup-card rounded-2xl p-6 transition-all duration-300">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
                 <span className="text-2xl">⚡</span>
-                <span>Demo Simulation</span>
+                <span>Portfolio Builder</span>
               </h2>
               
               <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                 <p className="text-xs text-cyan-300 leading-relaxed">
-                  💡 <strong>How it works:</strong> Configure your ideal allocation, set a rebalance threshold, and see how automated rebalancing would have performed over the past year with real market volatility.
+                  💡 <strong>Build Your Strategy:</strong> Configure your ideal allocation, set a rebalance threshold, and see how automated rebalancing would have performed over the past year.
                 </p>
               </div>
               
@@ -717,7 +717,7 @@ const AutoFolio = () => {
 
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
-            📊 Demo simulation • {realPrices ? '✅ Live prices' : '⏳ Loading prices...'}  • Connect wallet to create real portfolio
+            📊 Portfolio simulation • {realPrices ? '✅ Live prices' : '⏳ Loading prices...'}  • Connect wallet to create real portfolio
           </p>
         </div>
       </div>
