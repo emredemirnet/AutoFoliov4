@@ -366,8 +366,8 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
     const total = Object.values(allocations).reduce((sum, val) => sum + val, 0);
     if (Math.abs(total - 100) > 0.01) return;
 
-    // Reset seed for consistent fallback data
-    resetSeed(allocations, deviationThreshold);
+    // Reset seed based on allocations ONLY (not threshold) so HODL stays constant
+    resetSeed(allocations, 0);
 
     // Generate data ONCE and pass to both calculations
     const CRYPTO_DATA = getCryptoData();
