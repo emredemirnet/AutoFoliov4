@@ -104,25 +104,25 @@ const AutoFolio = () => {
   }, [connected, wallet]);
 
   const fetchRealPrices = async () => {
-  setLoadingPrices(true);
-  try {
-    const prices = await portfolioAPI.getPrices();
-    
-    // Eğer fiyatlar 0 ise fallback kullan
-    if (!prices.SOL || prices.SOL === 0) {
-      console.log('⚠️ Backend returned 0 prices, using fallback');
+    setLoadingPrices(true);
+    try {
+      const prices = await portfolioAPI.getPrices();
+      
+      // Eğer fiyatlar 0 ise fallback kullan
+      if (!prices.SOL || prices.SOL === 0) {
+        console.log('⚠️ Backend returned 0 prices, using fallback');
+        setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
+      } else {
+        setRealPrices(prices);
+        console.log('✅ Real prices loaded:', prices);
+      }
+    } catch (error) {
+      console.error('Failed to fetch prices:', error);
       setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
-    } else {
-      setRealPrices(prices);
-      console.log('✅ Real prices loaded:', prices);
+    } finally {
+      setLoadingPrices(false);
     }
-  } catch (error) {
-    console.error('Failed to fetch prices:', error);
-    setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
-  } finally {
-    setLoadingPrices(false);
-  }
-};
+  };
 
   const fetchWalletBalances = async () => {
     try {
@@ -292,14 +292,7 @@ const AutoFolio = () => {
       
       <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
-        <div className="flex items-center gap-4">
-          {realPrices && (
-            <div className="text-xs text-gray-400">
-              SOL: ${realPrices.SOL?.toFixed(2)} | BTC: ${realPrices.BTC?.toLocaleString()}
-            </div>
-          )}
-          <WalletButton />
-        </div>
+        <WalletButton />
       </div>
 
       <style>{`
@@ -408,11 +401,11 @@ const AutoFolio = () => {
                   <h2 className="text-2xl font-bold text-cyan-400 mb-2">🔐 Your Real Portfolio</h2>
                   <p className="text-sm text-gray-400">Create and manage your automated rebalancing portfolio</p>
                 </div>
-                {walletBalances && (
+                {walletBalances && walletBalances.SOL && (
                   <div className="text-right">
                     <div className="text-xs text-gray-500">Wallet Balance</div>
                     <div className="text-lg font-bold text-cyan-400">
-                      {walletBalances.SOL?.toFixed(4)} SOL
+                      {walletBalances.SOL.balance?.toFixed(4)} SOL
                     </div>
                   </div>
                 )}
