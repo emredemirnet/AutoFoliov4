@@ -1,483 +1,250 @@
-// server.js - AutoFolio Backend Service
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Connection, PublicKey, clusterApiUrl } = require('@solana/web3.js');
-const nodemailer = require('nodemailer');
 const { Pool } = require('pg');
+const { Connection, PublicKey } = require('@solana/web3.js');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Database connection
+// PostgreSQL connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-// Solana connection
-const connection = new Connection(
-  process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta')
-);
-
-// Email transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
+  ssl: {
+    rejectUnauthorized: false
   }
 });
 
-// Token mint addresses (Solana mainnet)
-const TOKENS = {
-  SOL: 'So11111111111111111111111111111111111111112',
-  USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-  BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
+// Solana connection with free RPC
+const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+
+// Price cache - update every 10 minutes
+let priceCache = {
+  SOL: 150,
+  BTC: 95000,
+  ETH: 3500,
+  USDC: 1,
+  USDT: 1
 };
+let lastPriceUpdate = 0;
+const PRICE_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
-// ============================================
-// DATABASE FUNCTIONS
-// ============================================
+// Simple fallback prices (we'll improve this later with CoinGecko)
+async function updatePrices() {
+  const now = Date.now();
+  if (now - lastPriceUpdate < PRICE_CACHE_DURATION) {
+    console.log('Using cached prices');
+    return priceCache;
+  }
 
-async function initDatabase() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      wallet_address VARCHAR(44) UNIQUE NOT NULL,
-      email VARCHAR(255),
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS portfolios (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id),
-      name VARCHAR(100) DEFAULT 'My Portfolio',
-      active BOOLEAN DEFAULT true,
-      threshold DECIMAL(5,2) DEFAULT 10.0,
-      last_rebalance TIMESTAMP,
-      created_at TIMESTAMP DEFAULT NOW()
-    );
-
-    CREATE TABLE IF NOT EXISTS portfolio_targets (
-      id SERIAL PRIMARY KEY,
-      portfolio_id INTEGER REFERENCES portfolios(id),
-      token_symbol VARCHAR(10) NOT NULL,
-      token_mint VARCHAR(44) NOT NULL,
-      target_percent DECIMAL(5,2) NOT NULL,
-      UNIQUE(portfolio_id, token_symbol)
-    );
-
-    CREATE TABLE IF NOT EXISTS rebalance_history (
-      id SERIAL PRIMARY KEY,
-      portfolio_id INTEGER REFERENCES portfolios(id),
-      executed_at TIMESTAMP DEFAULT NOW(),
-      swaps_executed JSONB,
-      total_value_usd DECIMAL(15,2),
-      success BOOLEAN DEFAULT true
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_portfolios_active ON portfolios(active);
-    CREATE INDEX IF NOT EXISTS idx_users_wallet ON users(wallet_address);
-  `);
-  console.log('✅ Database initialized');
+  try {
+    // For now, use fallback prices
+    // TODO: Add CoinGecko API integration
+    console.log('✅ Using fallback prices (CoinGecko integration coming soon)');
+    lastPriceUpdate = now;
+    return priceCache;
+  } catch (error) {
+    console.error('Error updating prices:', error);
+    return priceCache;
+  }
 }
 
-// ============================================
-// PRICE FUNCTIONS (Jupiter Price API v6)
-// ============================================
-
-async function getPrices() {
+// Initialize database tables
+async function initDatabase() {
   try {
-    // Jupiter Price API v6 - Correct format
-    const mints = [
-      'So11111111111111111111111111111111111111112', // SOL
-      '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', // BTC (Wrapped)
-      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
-    ].join(',');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portfolios (
+        id SERIAL PRIMARY KEY,
+        wallet_address VARCHAR(44) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        threshold INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        active BOOLEAN DEFAULT true,
+        last_notified TIMESTAMP
+      )
+    `);
 
-    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mints}`);
-    const data = await response.json();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portfolio_targets (
+        id SERIAL PRIMARY KEY,
+        portfolio_id INTEGER REFERENCES portfolios(id) ON DELETE CASCADE,
+        token_symbol VARCHAR(10) NOT NULL,
+        target_percent DECIMAL(5,2) NOT NULL
+      )
+    `);
 
-    console.log('Jupiter API response:', data);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS rebalance_history (
+        id SERIAL PRIMARY KEY,
+        portfolio_id INTEGER REFERENCES portfolios(id) ON DELETE CASCADE,
+        swaps_executed JSONB,
+        signatures JSONB,
+        success BOOLEAN,
+        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
-    const prices = {
-      SOL: data.data?.['So11111111111111111111111111111111111111112']?.price || 0,
-      BTC: data.data?.['3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh']?.price || 0,
-      USDC: data.data?.['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v']?.price || 1,
-      USDT: data.data?.['Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB']?.price || 1,
-    };
+    console.log('✅ Database tables initialized');
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
+  }
+}
 
-    console.log('✅ Fetched prices:', prices);
-    return prices;
+// Routes
+
+// Health check
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'AutoFolio Backend Running',
+    timestamp: new Date().toISOString(),
+    priceCache: priceCache,
+    lastPriceUpdate: new Date(lastPriceUpdate).toISOString()
+  });
+});
+
+// Get prices
+app.get('/api/prices', async (req, res) => {
+  try {
+    const prices = await updatePrices();
+    res.json(prices);
   } catch (error) {
     console.error('Error fetching prices:', error);
-    // Fallback prices
-    return { SOL: 150, BTC: 95000, USDC: 1, USDT: 1 };
+    res.json(priceCache); // Always return something
   }
-}
+});
 
-// ============================================
-// PORTFOLIO MONITORING
-// ============================================
-
-async function getWalletBalances(walletAddress) {
+// Get wallet balances
+app.get('/api/balances/:walletAddress', async (req, res) => {
   try {
+    const { walletAddress } = req.params;
     const pubkey = new PublicKey(walletAddress);
-    
+
     // Get SOL balance
     const solBalance = await connection.getBalance(pubkey);
     
-    // Get token accounts
-    const tokenAccounts = await connection.getParsedTokenAccountsByOwner(pubkey, {
-      programId: new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-    });
-
     const balances = {
-      SOL: solBalance / 1e9
+      SOL: {
+        balance: solBalance / 1e9,
+        mint: 'So11111111111111111111111111111111111111112'
+      }
     };
 
-    // Parse token balances
-    tokenAccounts.value.forEach(account => {
-      const data = account.account.data.parsed.info;
-      const mint = data.mint;
-      const amount = data.tokenAmount.uiAmount;
-
-      for (const [symbol, tokenMint] of Object.entries(TOKENS)) {
-        if (mint === tokenMint) {
-          balances[symbol] = amount;
-          break;
-        }
-      }
-    });
-
-    return balances;
+    res.json(balances);
   } catch (error) {
-    console.error('Error getting wallet balances:', error);
-    return {};
-  }
-}
-
-async function checkPortfolioBalance(portfolio) {
-  try {
-    const userResult = await pool.query('SELECT wallet_address, email FROM users WHERE id = $1', [portfolio.user_id]);
-    if (userResult.rows.length === 0) return;
-    
-    const { wallet_address, email } = userResult.rows[0];
-
-    const targetsResult = await pool.query(
-      'SELECT token_symbol, target_percent FROM portfolio_targets WHERE portfolio_id = $1',
-      [portfolio.id]
-    );
-    const targets = targetsResult.rows;
-
-    const balances = await getWalletBalances(wallet_address);
-    const prices = await getPrices();
-
-    let totalValue = 0;
-    const currentAllocations = {};
-
-    for (const [symbol, balance] of Object.entries(balances)) {
-      const price = prices[symbol] || 0;
-      const value = balance * price;
-      totalValue += value;
-      currentAllocations[symbol] = { balance, value, price };
-    }
-
-    let needsRebalance = false;
-    const drifts = {};
-
-    targets.forEach(target => {
-      const symbol = target.token_symbol;
-      const targetPercent = parseFloat(target.target_percent);
-      const currentValue = currentAllocations[symbol]?.value || 0;
-      const currentPercent = totalValue > 0 ? (currentValue / totalValue) * 100 : 0;
-      const drift = Math.abs(currentPercent - targetPercent);
-
-      drifts[symbol] = {
-        target: targetPercent,
-        current: currentPercent,
-        drift: drift
-      };
-
-      if (drift > parseFloat(portfolio.threshold)) {
-        needsRebalance = true;
-      }
-    });
-
-    if (needsRebalance) {
-      console.log(`⚠️  Portfolio ${portfolio.id} needs rebalancing`);
-      
-      if (email) {
-        await sendRebalanceNotification(email, portfolio, drifts, totalValue);
-      }
-
-      return { needsRebalance: true, drifts, totalValue };
-    }
-
-    return { needsRebalance: false, drifts, totalValue };
-  } catch (error) {
-    console.error('Error checking portfolio balance:', error);
-    return { needsRebalance: false };
-  }
-}
-
-// ============================================
-// JUPITER SWAP INTEGRATION
-// ============================================
-
-async function getJupiterQuote(inputMint, outputMint, amount) {
-  try {
-    const url = `https://quote-api.jup.ag/v6/quote?inputMint=${inputMint}&outputMint=${outputMint}&amount=${amount}&slippageBps=50`;
-    const response = await fetch(url);
-    const quote = await response.json();
-    return quote;
-  } catch (error) {
-    console.error('Error getting Jupiter quote:', error);
-    return null;
-  }
-}
-
-async function executeJupiterSwap(userWallet, quote) {
-  try {
-    const swapResponse = await fetch('https://quote-api.jup.ag/v6/swap', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        quoteResponse: quote,
-        userPublicKey: userWallet,
-        wrapAndUnwrapSol: true,
-      })
-    });
-
-    const { swapTransaction } = await swapResponse.json();
-    return swapTransaction;
-  } catch (error) {
-    console.error('Error executing Jupiter swap:', error);
-    return null;
-  }
-}
-
-// ============================================
-// EMAIL NOTIFICATIONS
-// ============================================
-
-async function sendRebalanceNotification(email, portfolio, drifts, totalValue) {
-  const driftDetails = Object.entries(drifts)
-    .map(([symbol, data]) => `${symbol}: ${data.current.toFixed(2)}% (target: ${data.target}%, drift: ${data.drift.toFixed(2)}%)`)
-    .join('\n');
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: '🔔 AutoFolio: Rebalance Needed',
-    text: `Your portfolio "${portfolio.name}" has drifted beyond your ${portfolio.threshold}% threshold.
-
-Current Allocations:
-${driftDetails}
-
-Total Portfolio Value: $${totalValue.toFixed(2)}
-
-Login to AutoFolio to execute rebalance: https://autofolio.space
-
-Best regards,
-AutoFolio Team`
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`✅ Email sent to ${email}`);
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
-}
-
-// ============================================
-// API ENDPOINTS
-// ============================================
-
-app.post('/api/users', async (req, res) => {
-  try {
-    const { wallet_address, email } = req.body;
-    
-    const result = await pool.query(
-      'INSERT INTO users (wallet_address, email) VALUES ($1, $2) ON CONFLICT (wallet_address) DO UPDATE SET email = $2 RETURNING *',
-      [wallet_address, email]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching balances:', error);
+    res.status(500).json({ error: 'Failed to fetch balances' });
   }
 });
 
+// Create portfolio
 app.post('/api/portfolios', async (req, res) => {
+  const client = await pool.connect();
+  
   try {
     const { wallet_address, name, threshold, targets } = req.body;
 
-    let userResult = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [wallet_address]);
-    let userId;
-
-    if (userResult.rows.length === 0) {
-      const newUser = await pool.query('INSERT INTO users (wallet_address) VALUES ($1) RETURNING id', [wallet_address]);
-      userId = newUser.rows[0].id;
-    } else {
-      userId = userResult.rows[0].id;
+    // Validate
+    if (!wallet_address || !name || !threshold || !targets) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const portfolioResult = await pool.query(
-      'INSERT INTO portfolios (user_id, name, threshold) VALUES ($1, $2, $3) RETURNING *',
-      [userId, name || 'My Portfolio', threshold || 10]
+    // Check total allocation
+    const totalPercent = targets.reduce((sum, t) => sum + t.percent, 0);
+    if (Math.abs(totalPercent - 100) > 0.01) {
+      return res.status(400).json({ error: 'Total allocation must equal 100%' });
+    }
+
+    await client.query('BEGIN');
+
+    // Insert portfolio
+    const portfolioResult = await client.query(
+      'INSERT INTO portfolios (wallet_address, name, threshold) VALUES ($1, $2, $3) RETURNING *',
+      [wallet_address, name, threshold]
     );
+
     const portfolio = portfolioResult.rows[0];
 
+    // Insert targets
     for (const target of targets) {
-      await pool.query(
-        'INSERT INTO portfolio_targets (portfolio_id, token_symbol, token_mint, target_percent) VALUES ($1, $2, $3, $4)',
-        [portfolio.id, target.symbol, TOKENS[target.symbol], target.percent]
+      await client.query(
+        'INSERT INTO portfolio_targets (portfolio_id, token_symbol, target_percent) VALUES ($1, $2, $3)',
+        [portfolio.id, target.symbol, target.percent]
       );
     }
 
-    res.json(portfolio);
+    await client.query('COMMIT');
+
+    console.log(`✅ Portfolio created: ${portfolio.id} for ${wallet_address}`);
+    res.status(201).json(portfolio);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    await client.query('ROLLBACK');
+    console.error('Error creating portfolio:', error);
+    res.status(500).json({ error: 'Failed to create portfolio', details: error.message });
+  } finally {
+    client.release();
   }
 });
 
-app.get('/api/portfolios/:wallet_address', async (req, res) => {
+// Get portfolios for wallet
+app.get('/api/portfolios/:walletAddress', async (req, res) => {
   try {
-    const { wallet_address } = req.params;
-
-    const result = await pool.query(`
-      SELECT p.*, array_agg(json_build_object('symbol', pt.token_symbol, 'percent', pt.target_percent)) as targets
-      FROM portfolios p
-      JOIN users u ON p.user_id = u.id
-      LEFT JOIN portfolio_targets pt ON p.id = pt.portfolio_id
-      WHERE u.wallet_address = $1 AND p.active = true
-      GROUP BY p.id
-      ORDER BY p.created_at DESC
-    `, [wallet_address]);
+    const { walletAddress } = req.params;
+    
+    const result = await pool.query(
+      `SELECT p.*, 
+        json_agg(json_build_object('symbol', pt.token_symbol, 'percent', pt.target_percent)) as targets
+       FROM portfolios p
+       LEFT JOIN portfolio_targets pt ON p.id = pt.portfolio_id
+       WHERE p.wallet_address = $1 AND p.active = true
+       GROUP BY p.id
+       ORDER BY p.created_at DESC`,
+      [walletAddress]
+    );
 
     res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching portfolios:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolios' });
   }
 });
 
-app.get('/api/prices', async (req, res) => {
+// Get all active portfolios (for monitoring)
+app.get('/api/portfolios', async (req, res) => {
   try {
-    const prices = await getPrices();
-    res.json(prices);
+    const result = await pool.query(
+      `SELECT p.*, 
+        json_agg(json_build_object('symbol', pt.token_symbol, 'percent', pt.target_percent)) as targets
+       FROM portfolios p
+       LEFT JOIN portfolio_targets pt ON p.id = pt.portfolio_id
+       WHERE p.active = true
+       GROUP BY p.id
+       ORDER BY p.created_at DESC`
+    );
+
+    res.json(result.rows);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching all portfolios:', error);
+    res.status(500).json({ error: 'Failed to fetch portfolios' });
   }
 });
 
-app.get('/api/balances/:wallet_address', async (req, res) => {
-  try {
-    const { wallet_address } = req.params;
-    const balances = await getWalletBalances(wallet_address);
-    const prices = await getPrices();
-
-    const result = {};
-    for (const [symbol, balance] of Object.entries(balances)) {
-      result[symbol] = {
-        balance,
-        price: prices[symbol] || 0,
-        value: balance * (prices[symbol] || 0)
-      };
-    }
-
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// Start server
+app.listen(PORT, async () => {
+  console.log(`🚀 AutoFolio Backend running on port ${PORT}`);
+  await initDatabase();
+  
+  // Update prices immediately and then every 10 minutes
+  await updatePrices();
+  setInterval(updatePrices, PRICE_CACHE_DURATION);
+  console.log('⏰ Price updates scheduled every 10 minutes');
 });
 
-app.post('/api/swap/quote', async (req, res) => {
-  try {
-    const { inputToken, outputToken, amount } = req.body;
-    const inputMint = TOKENS[inputToken];
-    const outputMint = TOKENS[outputToken];
-
-    if (!inputMint || !outputMint) {
-      return res.status(400).json({ error: 'Invalid tokens' });
-    }
-
-    const quote = await getJupiterQuote(inputMint, outputMint, amount);
-    res.json(quote);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, closing database pool');
+  await pool.end();
+  process.exit(0);
 });
-
-app.post('/api/rebalance', async (req, res) => {
-  try {
-    const { portfolio_id, wallet_address } = req.body;
-
-    const check = await checkPortfolioBalance({ id: portfolio_id, user_id: 1, threshold: 10 });
-
-    if (!check.needsRebalance) {
-      return res.json({ message: 'Portfolio balanced, no rebalance needed' });
-    }
-
-    res.json({ needsRebalance: true, drifts: check.drifts });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// ============================================
-// MONITORING SERVICE (runs every 5 minutes)
-// ============================================
-
-async function monitorAllPortfolios() {
-  try {
-    console.log('🔍 Monitoring all active portfolios...');
-
-    const result = await pool.query('SELECT * FROM portfolios WHERE active = true');
-    const portfolios = result.rows;
-
-    for (const portfolio of portfolios) {
-      await checkPortfolioBalance(portfolio);
-    }
-
-    console.log(`✅ Checked ${portfolios.length} portfolios`);
-  } catch (error) {
-    console.error('Error monitoring portfolios:', error);
-  }
-}
-
-setInterval(monitorAllPortfolios, 5 * 60 * 1000);
-
-// ============================================
-// START SERVER
-// ============================================
-
-const PORT = process.env.PORT || 3001;
-
-async function start() {
-  try {
-    await initDatabase();
-    
-    app.listen(PORT, () => {
-      console.log(`🚀 AutoFolio backend running on port ${PORT}`);
-      console.log(`📊 Monitoring service active`);
-      
-      setTimeout(monitorAllPortfolios, 5000);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-start();
-// Version: 1.0.2
