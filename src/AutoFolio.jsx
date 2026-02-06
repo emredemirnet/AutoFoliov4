@@ -77,7 +77,7 @@ const getMonthLabels = () => {
 
 const MONTHS = getMonthLabels();
 
-const AutoFolio = ({ presetStrategy, onDashboard }) => {
+const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
   const getInitialAllocations = () => {
     if (presetStrategy && presetStrategy.allocation) {
       const allocs = {};
@@ -260,8 +260,7 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     return data;
   };
 
-  const calculateRebalancingStrategy = (targetAllocations, threshold, initialInvestment = 10000) => {
-    const CRYPTO_DATA = getCryptoData();
+  const calculateRebalancingStrategy = (targetAllocations, threshold, CRYPTO_DATA, initialInvestment = 10000) => {
     const days = Math.min(...assets.map(a => CRYPTO_DATA[a]?.length || 365));
     const results = [];
     const rebalances = [];
@@ -341,8 +340,7 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     return { results, rebalances, days };
   };
 
-  const calculateBuyAndHold = (targetAllocations, initialInvestment = 10000) => {
-    const CRYPTO_DATA = getCryptoData();
+  const calculateBuyAndHold = (targetAllocations, CRYPTO_DATA, initialInvestment = 10000) => {
     const days = Math.min(...assets.map(a => CRYPTO_DATA[a]?.length || 365));
     const results = [];
     
@@ -371,8 +369,11 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     // Reset seed for consistent fallback data
     resetSeed(allocations, deviationThreshold);
 
-    const { results: rebalancingResults, rebalances, days } = calculateRebalancingStrategy(allocations, deviationThreshold);
-    const { results: buyAndHoldResults } = calculateBuyAndHold(allocations);
+    // Generate data ONCE and pass to both calculations
+    const CRYPTO_DATA = getCryptoData();
+
+    const { results: rebalancingResults, rebalances, days } = calculateRebalancingStrategy(allocations, deviationThreshold, CRYPTO_DATA);
+    const { results: buyAndHoldResults } = calculateBuyAndHold(allocations, CRYPTO_DATA);
 
     // Map results to display intervals
     const displayIntervals = DISPLAY_INTERVALS.map(d => Math.min(d, days - 1));
@@ -393,16 +394,21 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
   const totalAllocation = Object.values(allocations).reduce((sum, val) => sum + val, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-8" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-4" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
       
-      <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
-        <div className="flex items-center gap-4">
+      <div className="flex justify-between items-center mb-4 max-w-7xl mx-auto">
+        <div className="flex items-center gap-3">
+          {onBack && (
+            <button onClick={onBack} className="px-3 py-2 bg-gray-800/50 hover:bg-gray-700/50 text-gray-400 hover:text-white rounded-lg transition text-sm">
+              ← Home
+            </button>
+          )}
+          <h1 className="text-2xl font-bold text-cyan-400">AutoFolio</h1>
+        </div>
+        <div className="flex items-center gap-3">
           {connected && onDashboard && (
-            <button
-              onClick={onDashboard}
-              className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-400/50 rounded-lg font-semibold transition flex items-center gap-2"
-            >
+            <button onClick={onDashboard}
+              className="px-3 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-400/50 rounded-lg font-semibold transition text-sm">
               📊 My Portfolios
             </button>
           )}
@@ -454,25 +460,24 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
       `}</style>
 
       <div className="max-w-7xl mx-auto">
-        <div className="mb-10 flex flex-col items-center justify-center text-center">
-          <h1 className="text-7xl font-black mb-3 glow-text" style={{ fontFamily: "'Orbitron', sans-serif", letterSpacing: '0.1em' }}>
+        <div className="mb-4 flex flex-col items-center justify-center text-center">
+          <h1 className="text-4xl font-black mb-1 glow-text" style={{ fontFamily: "'Orbitron', sans-serif", letterSpacing: '0.1em' }}>
             <span className="text-cyan-400">AutoFolio</span>
           </h1>
-          <p className="text-cyan-500 text-sm tracking-widest uppercase opacity-80">Set It. Forget It. Stay Balanced.</p>
-          <p className="text-gray-400 text-xs mt-2">Automated Portfolio Rebalancing on Solana</p>
-          <div className="mt-4 h-1 w-32 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
+          <p className="text-cyan-500 text-xs tracking-widest uppercase opacity-80">Set It. Forget It. Stay Balanced.</p>
+          <div className="mt-2 h-0.5 w-20 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
         </div>
 
         {/* Tab Navigation */}
         {connected && (
-          <div className="flex gap-2 mb-6 max-w-7xl mx-auto">
+          <div className="flex gap-2 mb-4 max-w-7xl mx-auto">
             <button onClick={() => setActiveTab('simulate')}
-              className={`px-6 py-3 rounded-xl font-semibold transition ${activeTab === 'simulate' ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'}`}>
-              📊 Simulate Strategy
+              className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${activeTab === 'simulate' ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'}`}>
+              📊 Simulate
             </button>
             <button onClick={() => setActiveTab('create')}
-              className={`px-6 py-3 rounded-xl font-semibold transition ${activeTab === 'create' ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'}`}>
-              🔐 Create Real Portfolio
+              className={`px-4 py-2 rounded-lg font-semibold transition text-sm ${activeTab === 'create' ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'}`}>
+              🔐 Create Portfolio
             </button>
           </div>
         )}
@@ -503,11 +508,11 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
 
         {/* Simulation */}
         {(!connected || activeTab === 'simulate') && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-1">
-            <div className="jup-card rounded-2xl p-6 transition-all duration-300">
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <span className="text-2xl">⚡</span>
+            <div className="jup-card rounded-2xl p-4 transition-all duration-300">
+              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <span className="text-xl">⚡</span>
                 <span>Portfolio Builder</span>
               </h2>
               
@@ -690,7 +695,7 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
                     </div>
                   </div>
 
-                  <ResponsiveContainer width="100%" height={350}>
+                  <ResponsiveContainer width="100%" height={280}>
                     <LineChart data={simulationData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
                       <XAxis dataKey="month" stroke="#6b7280" style={{ fontSize: '11px' }} />
