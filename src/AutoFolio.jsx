@@ -366,7 +366,17 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
       
       <div className="flex justify-between items-center mb-8 max-w-7xl mx-auto">
         <h1 className="text-3xl font-bold text-cyan-400">AutoFolio</h1>
-        <WalletButton />
+        <div className="flex items-center gap-4">
+          {connected && onDashboard && (
+            <button
+              onClick={onDashboard}
+              className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 border border-cyan-400/50 rounded-lg font-semibold transition flex items-center gap-2"
+            >
+              📊 My Portfolios
+            </button>
+          )}
+          <WalletButton />
+        </div>
       </div>
 
       <style>{`
