@@ -1,215 +1,69 @@
-import { useState, useEffect } from 'react';
-
-const API_URL = 'https://autofolio-backend-production.up.railway.app';
-
-// Detect available wallets
-const getWalletProviders = () => {
-  const providers = [];
-  
-  if (window.phantom?.solana?.isPhantom) {
-    providers.push({ name: 'Phantom', provider: window.phantom.solana, icon: '👻' });
-  }
-  if (window.solflare?.isSolflare) {
-    providers.push({ name: 'Solflare', provider: window.solflare, icon: '🔥' });
-  }
-  if (window.backpack) {
-    providers.push({ name: 'Backpack', provider: window.backpack, icon: '🎒' });
-  }
-  if (window.coinbaseSolana) {
-    providers.push({ name: 'Coinbase', provider: window.coinbaseSolana, icon: '🔵' });
-  }
-  
-  return providers;
-};
-
-export function useWallet() {
-  const [wallet, setWallet] = useState(null);
-  const [connected, setConnected] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-
-  const connectWallet = async (provider) => {
-    setConnecting(true);
-    setShowModal(false);
-    
-    try {
-      const resp = await provider.connect();
-      const walletAddress = resp.publicKey.toString();
+{/* Wallet Selection Modal */}
+{showModal && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
+    <div className="bg-gray-900 border border-cyan-500/30 rounded-2xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+      <div className="flex justify-between items-center mb-6">
+        <h3 className="text-xl font-bold text-cyan-400">Connect to AutoFolio</h3>
+        <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
+      </div>
       
-      // Save to backend
-      await fetch(`${API_URL}/api/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          wallet_address: walletAddress,
-          email: null 
-        })
-      });
+      {/* Gmail Login */}
+      <div className="mb-6">
+        <button
+          onClick={() => handleGoogleLogin()}
+          className="w-full px-4 py-4 bg-white hover:bg-gray-100 rounded-lg flex items-center justify-center gap-3 transition group"
+        >
+          <svg className="w-6 h-6" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          <span className="text-gray-900 font-semibold">Continue with Google</span>
+        </button>
+      </div>
 
-      setWallet(walletAddress);
-      setConnected(true);
-      localStorage.setItem('wallet', walletAddress);
-      localStorage.setItem('walletType', provider.name || 'unknown');
+      <div className="relative mb-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-700"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-gray-900 text-gray-500">or connect wallet</span>
+        </div>
+      </div>
       
-      console.log('✅ Wallet connected:', walletAddress);
-    } catch (err) {
-      console.error('Wallet connection failed:', err);
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const disconnectWallet = async () => {
-    const walletType = localStorage.getItem('walletType');
-    const providers = getWalletProviders();
-    const provider = providers.find(p => p.name === walletType)?.provider;
-    
-    if (provider && provider.disconnect) {
-      await provider.disconnect();
-    }
-    
-    setWallet(null);
-    setConnected(false);
-    localStorage.removeItem('wallet');
-    localStorage.removeItem('walletType');
-  };
-
-  useEffect(() => {
-    const savedWallet = localStorage.getItem('wallet');
-    if (savedWallet) {
-      setWallet(savedWallet);
-      setConnected(true);
-    }
-  }, []);
-
-  return {
-    wallet,
-    connected,
-    connecting,
-    connectWallet,
-    disconnectWallet,
-    showModal,
-    setShowModal
-  };
-}
-
-// Wallet Button with Modal
-export function WalletButton() {
-  const { wallet, connected, connecting, disconnectWallet, showModal, setShowModal, connectWallet } = useWallet();
-  const [availableWallets, setAvailableWallets] = useState([]);
-
-  useEffect(() => {
-    setAvailableWallets(getWalletProviders());
-  }, [showModal]);
-
-  if (connected) {
-    return (
-      <button
-        onClick={disconnectWallet}
-        className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition font-mono text-sm"
-      >
-        {wallet?.slice(0, 4)}...{wallet?.slice(-4)} ✅
-      </button>
-    );
-  }
-
-  return (
-    <>
-      <button
-        onClick={() => setShowModal(true)}
-        disabled={connecting}
-        className="px-6 py-2 bg-cyan-500 text-black font-bold rounded-lg hover:bg-cyan-400 transition disabled:opacity-50"
-      >
-        {connecting ? 'Connecting...' : 'Connect Wallet'}
-      </button>
-
-      {/* Wallet Selection Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={() => setShowModal(false)}>
-          <div className="bg-gray-900 border border-cyan-500/30 rounded-2xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-bold text-cyan-400">Connect Wallet</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-white text-2xl">×</button>
-            </div>
-            
-            <div className="space-y-3">
-              {availableWallets.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-400 mb-4">No Solana wallets detected</p>
-                  <div className="space-y-2">
-                    <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer" 
-                       className="block px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg text-purple-400 transition">
-                      👻 Install Phantom
-                    </a>
-                    <a href="https://solflare.com/" target="_blank" rel="noopener noreferrer"
-                       className="block px-4 py-3 bg-orange-600/20 hover:bg-orange-600/30 rounded-lg text-orange-400 transition">
-                      🔥 Install Solflare
-                    </a>
-                    <a href="https://backpack.app/" target="_blank" rel="noopener noreferrer"
-                       className="block px-4 py-3 bg-black/40 hover:bg-black/60 border border-white/20 rounded-lg text-white transition">
-                      🎒 Install Backpack
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                availableWallets.map((w) => (
-                  <button
-                    key={w.name}
-                    onClick={() => connectWallet(w.provider)}
-                    className="w-full px-4 py-4 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center gap-3 transition group"
-                  >
-                    <span className="text-3xl">{w.icon}</span>
-                    <span className="text-lg font-semibold text-white group-hover:text-cyan-400 transition">{w.name}</span>
-                  </button>
-                ))
-              )}
+      <div className="space-y-3">
+        {availableWallets.length === 0 ? (
+          <div className="text-center py-4">
+            <p className="text-gray-400 mb-4 text-sm">No Solana wallets detected</p>
+            <div className="space-y-2">
+              <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer" 
+                 className="block px-4 py-3 bg-purple-600/20 hover:bg-purple-600/30 rounded-lg text-purple-400 transition text-sm">
+                👻 Install Phantom
+              </a>
+              <a href="https://solflare.com/" target="_blank" rel="noopener noreferrer"
+                 className="block px-4 py-3 bg-orange-600/20 hover:bg-orange-600/30 rounded-lg text-orange-400 transition text-sm">
+                🔥 Install Solflare
+              </a>
+              <a href="https://backpack.app/" target="_blank" rel="noopener noreferrer"
+                 className="block px-4 py-3 bg-black/40 hover:bg-black/60 border border-white/20 rounded-lg text-white transition text-sm">
+                🎒 Install Backpack
+              </a>
             </div>
           </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-// Portfolio API functions
-export const portfolioAPI = {
-  async createPortfolio(wallet, portfolioData) {
-    const response = await fetch(`${API_URL}/api/portfolios`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        wallet_address: wallet,
-        name: portfolioData.name || 'My Portfolio',
-        threshold: portfolioData.threshold || 10,
-        targets: portfolioData.targets
-      })
-    });
-    return response.json();
-  },
-
-  async getPortfolios(wallet) {
-    const response = await fetch(`${API_URL}/api/portfolios/${wallet}`);
-    return response.json();
-  },
-
-  async getBalances(wallet) {
-    const response = await fetch(`${API_URL}/api/balances/${wallet}`);
-    return response.json();
-  },
-
-  async getPrices() {
-    const response = await fetch(`${API_URL}/api/prices`);
-    return response.json();
-  },
-
-  async getSwapQuote(inputToken, outputToken, amount) {
-    const response = await fetch(`${API_URL}/api/swap/quote`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ inputToken, outputToken, amount })
-    });
-    return response.json();
-  }
-};
-
-export default useWallet;
+        ) : (
+          availableWallets.map((w) => (
+            <button
+              key={w.name}
+              onClick={() => connectWallet(w.provider)}
+              className="w-full px-4 py-3 bg-gray-800 hover:bg-gray-700 rounded-lg flex items-center gap-3 transition group"
+            >
+              <span className="text-2xl">{w.icon}</span>
+              <span className="text-base font-semibold text-white group-hover:text-cyan-400 transition">{w.name}</span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+)}
