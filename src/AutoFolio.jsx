@@ -53,7 +53,25 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
 };
 
 const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 364];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Now'];
+
+// Generate month labels starting from today
+const getMonthLabels = () => {
+  const now = new Date();
+  const labels = [];
+  for (let i = 0; i < 13; i++) {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() + i);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    if (i === 0) {
+      labels.push('Today');
+    } else {
+      labels.push(`${monthNames[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`);
+    }
+  }
+  return labels;
+};
+
+const MONTHS = getMonthLabels();
 
 const AutoFolio = ({ presetStrategy, onDashboard }) => {
   // Initialize with preset strategy if provided
@@ -86,11 +104,25 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     return 10;
   };
 
+  // Convert preset strategy to PortfolioCreate format
+  const getPresetTargets = () => {
+    if (presetStrategy && presetStrategy.allocation) {
+      return presetStrategy.allocation.map(item => ({
+        symbol: item.asset,
+        percent: item.percent
+      }));
+    }
+    return null;
+  };
+
   const [allocations, setAllocations] = useState(getInitialAllocations());
   const [selectedAssets, setSelectedAssets] = useState(getInitialAssets());
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
   const { wallet, connected } = useWallet();
+  
+  // Tab state: 'simulate' or 'create'
+  const [activeTab, setActiveTab] = useState(presetStrategy ? 'simulate' : 'simulate');
   
   // Real prices from API
   const [realPrices, setRealPrices] = useState(null);
@@ -131,7 +163,6 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
   // Auto-run simulation when preset strategy is loaded
   useEffect(() => {
     if (presetStrategy) {
-      // Wait for allocations to be set, then run simulation
       setTimeout(() => {
         runSimulation();
       }, 200);
@@ -168,7 +199,6 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     try {
       const prices = await portfolioAPI.getPrices();
       
-      // Eğer fiyatlar 0 ise fallback kullan
       if (!prices.SOL || prices.SOL === 0) {
         console.log('⚠️ Backend returned 0 prices, using fallback');
         setRealPrices({ SOL: 150, BTC: 95000, USDC: 1, USDT: 1 });
@@ -199,7 +229,6 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
   };
 
   const generateCryptoData = () => {
-    // Use real prices if available, otherwise use simulated
     const basePrices = realPrices || {
       BTC: 42000,
       ETH: 2200,
@@ -476,8 +505,34 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
           <div className="mt-4 h-1 w-32 bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-50"></div>
         </div>
 
-        {/* Real Portfolio Section - Show if wallet connected */}
-        {connected ? (
+        {/* Tab Navigation - Show when wallet connected */}
+        {connected && (
+          <div className="flex gap-2 mb-6 max-w-7xl mx-auto">
+            <button
+              onClick={() => setActiveTab('simulate')}
+              className={`px-6 py-3 rounded-xl font-semibold transition ${
+                activeTab === 'simulate' 
+                  ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' 
+                  : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              📊 Simulate Strategy
+            </button>
+            <button
+              onClick={() => setActiveTab('create')}
+              className={`px-6 py-3 rounded-xl font-semibold transition ${
+                activeTab === 'create' 
+                  ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-400' 
+                  : 'bg-gray-800/50 text-gray-400 hover:text-gray-300'
+              }`}
+            >
+              🔐 Create Real Portfolio
+            </button>
+          </div>
+        )}
+
+        {/* Create Portfolio Section - Only when wallet connected AND create tab active */}
+        {connected && activeTab === 'create' && (
           <div className="mb-12">
             <div className="jup-card rounded-2xl p-8 border-2 border-cyan-400/50">
               <div className="flex items-center justify-between mb-6">
@@ -499,11 +554,13 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
                   </div>
                 )}
               </div>
-              <PortfolioCreate />
+              <PortfolioCreate presetTargets={getPresetTargets()} presetThreshold={presetStrategy?.threshold} presetName={presetStrategy?.name} />
             </div>
           </div>
-        ) : (
-          /* Simulation Section - Show if wallet NOT connected */
+        )}
+
+        {/* Simulation Section - Always show when simulate tab OR wallet not connected */}
+        {(!connected || activeTab === 'simulate') && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
             <div className="jup-card rounded-2xl p-6 transition-all duration-300">
@@ -514,7 +571,7 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
               
               <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
                 <p className="text-xs text-cyan-300 leading-relaxed">
-                  💡 <strong>Build Your Strategy:</strong> Configure your ideal allocation, set a rebalance threshold, and see how automated rebalancing would have performed over the past year.
+                  💡 <strong>Build Your Strategy:</strong> Configure your ideal allocation, set a rebalance threshold, and see how automated rebalancing would perform over the next year.
                 </p>
               </div>
               
@@ -657,6 +714,16 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
                 >
                   {Math.abs(totalAllocation - 100) > 0.01 ? '⚠ Adjust to 100%' : '✓ Run Simulation'}
                 </button>
+
+                {/* Button to go to create tab after simulation */}
+                {connected && simulationData && (
+                  <button
+                    onClick={() => setActiveTab('create')}
+                    className="w-full mt-3 py-3 px-6 rounded-xl font-bold text-sm bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition"
+                  >
+                    ✅ Happy with results? Create this portfolio →
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -808,7 +875,6 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
           </div>
         </div>
         )}
-        {/* End conditional rendering */}
 
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
