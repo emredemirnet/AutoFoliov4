@@ -459,8 +459,13 @@ const AutoFolio = ({ presetStrategy }) => {
             <div className="jup-card rounded-2xl p-8 border-2 border-cyan-400/50">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-cyan-400 mb-2">🔐 Your Real Portfolio</h2>
-                  <p className="text-sm text-gray-400">Create and manage your automated rebalancing portfolio</p>
+                  <h2 className="text-2xl font-bold text-cyan-400 mb-2 flex items-center gap-2">
+                    🔐 Your Real Portfolio
+                    <span className="text-xs px-3 py-1 bg-yellow-500/20 border border-yellow-500/50 text-yellow-400 rounded-full">
+                      DEMO MODE
+                    </span>
+                  </h2>
+                  <p className="text-sm text-gray-400">Create and manage your automated rebalancing portfolio (Simulation only - Real trading coming soon!)</p>
                 </div>
                 {walletBalances && walletBalances.SOL && (
                   <div className="text-right">
@@ -476,7 +481,9 @@ const AutoFolio = ({ presetStrategy }) => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Simulation Section - ONLY show when wallet NOT connected */}
+        {!connected && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1">
             <div className="jup-card rounded-2xl p-6 transition-all duration-300">
               <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
@@ -779,6 +786,8 @@ const AutoFolio = ({ presetStrategy }) => {
             </div>
           </div>
         </div>
+        )}
+        {/* End of Simulation Section */}
 
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
