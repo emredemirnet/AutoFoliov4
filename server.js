@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Connection, PublicKey, clusterApiUrl } = require('@solana/web3.js');
-const { PythHttpClient } = require('@pythnetwork/client');
 const nodemailer = require('nodemailer');
 const { Pool } = require('pg');
 
