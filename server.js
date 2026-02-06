@@ -18,8 +18,9 @@ const pool = new Pool({
   }
 });
 
-// Solana connection with free RPC
-const connection = new Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+// Solana connection
+const SOLANA_RPC = process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com';
+const connection = new Connection(SOLANA_RPC, 'confirmed');
 
 // Price cache - update every 10 minutes
 let priceCache = {
@@ -30,9 +31,8 @@ let priceCache = {
   USDT: 1
 };
 let lastPriceUpdate = 0;
-const PRICE_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const PRICE_CACHE_DURATION = 10 * 60 * 1000;
 
-// Simple fallback prices (we'll improve this later with CoinGecko)
 async function updatePrices() {
   const now = Date.now();
   if (now - lastPriceUpdate < PRICE_CACHE_DURATION) {
@@ -41,9 +41,7 @@ async function updatePrices() {
   }
 
   try {
-    // For now, use fallback prices
-    // TODO: Add CoinGecko API integration
-    console.log('✅ Using fallback prices (CoinGecko integration coming soon)');
+    console.log('✅ Using fallback prices');
     lastPriceUpdate = now;
     return priceCache;
   } catch (error) {
@@ -52,7 +50,6 @@ async function updatePrices() {
   }
 }
 
-// Initialize database tables
 async function initDatabase() {
   try {
     await pool.query(`
@@ -62,8 +59,7 @@ async function initDatabase() {
         name VARCHAR(100) NOT NULL,
         threshold INTEGER NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        active BOOLEAN DEFAULT true,
-        last_notified TIMESTAMP
+        active BOOLEAN DEFAULT true
       )
     `);
 
@@ -76,90 +72,61 @@ async function initDatabase() {
       )
     `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS rebalance_history (
-        id SERIAL PRIMARY KEY,
-        portfolio_id INTEGER REFERENCES portfolios(id) ON DELETE CASCADE,
-        swaps_executed JSONB,
-        signatures JSONB,
-        success BOOLEAN,
-        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
     console.log('✅ Database tables initialized');
   } catch (error) {
     console.error('❌ Database initialization error:', error);
   }
 }
 
-// Routes
-
-// Health check
 app.get('/', (req, res) => {
   res.json({ 
     status: 'AutoFolio Backend Running',
-    timestamp: new Date().toISOString(),
-    priceCache: priceCache,
-    lastPriceUpdate: new Date(lastPriceUpdate).toISOString()
+    timestamp: new Date().toISOString()
   });
 });
 
-// Get prices
 app.get('/api/prices', async (req, res) => {
   try {
     const prices = await updatePrices();
     res.json(prices);
   } catch (error) {
-    console.error('Error fetching prices:', error);
-    res.json(priceCache); // Always return something
+    res.json(priceCache);
   }
 });
 
-// Get wallet balances
 app.get('/api/balances/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
     const pubkey = new PublicKey(walletAddress);
-
-    // Get SOL balance
     const solBalance = await connection.getBalance(pubkey);
     
-    const balances = {
-      SOL: {
-        balance: solBalance / 1e9,
-        mint: 'So11111111111111111111111111111111111111112'
-      }
-    };
-
-    res.json(balances);
+    res.json({
+      SOL: { balance: solBalance / 1e9 }
+    });
   } catch (error) {
-    console.error('Error fetching balances:', error);
     res.status(500).json({ error: 'Failed to fetch balances' });
   }
 });
 
-// Create portfolio
 app.post('/api/portfolios', async (req, res) => {
   const client = await pool.connect();
   
   try {
     const { wallet_address, name, threshold, targets } = req.body;
 
-    // Validate
     if (!wallet_address || !name || !threshold || !targets) {
+      client.release();
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Check total allocation
     const totalPercent = targets.reduce((sum, t) => sum + t.percent, 0);
     if (Math.abs(totalPercent - 100) > 0.01) {
-      return res.status(400).json({ error: 'Total allocation must equal 100%' });
+      client.release();
+      return res.status(400).json({ error: 'Total must equal 100%' });
     }
 
     await client.query('BEGIN');
 
-    // Insert portfolio
     const portfolioResult = await client.query(
       'INSERT INTO portfolios (wallet_address, name, threshold) VALUES ($1, $2, $3) RETURNING *',
       [wallet_address, name, threshold]
@@ -167,7 +134,6 @@ app.post('/api/portfolios', async (req, res) => {
 
     const portfolio = portfolioResult.rows[0];
 
-    // Insert targets
     for (const target of targets) {
       await client.query(
         'INSERT INTO portfolio_targets (portfolio_id, token_symbol, target_percent) VALUES ($1, $2, $3)',
@@ -176,19 +142,16 @@ app.post('/api/portfolios', async (req, res) => {
     }
 
     await client.query('COMMIT');
-
-    console.log(`✅ Portfolio created: ${portfolio.id} for ${wallet_address}`);
     res.status(201).json(portfolio);
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error creating portfolio:', error);
-    res.status(500).json({ error: 'Failed to create portfolio', details: error.message });
+    console.error('❌ Portfolio creation error:', error.message);
+    res.status(500).json({ error: error.message });
   } finally {
     client.release();
   }
 });
 
-// Get portfolios for wallet
 app.get('/api/portfolios/:walletAddress', async (req, res) => {
   try {
     const { walletAddress } = req.params;
@@ -206,12 +169,11 @@ app.get('/api/portfolios/:walletAddress', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching portfolios:', error);
-    res.status(500).json({ error: 'Failed to fetch portfolios' });
+    console.error('❌ Fetch portfolios error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get all active portfolios (for monitoring)
 app.get('/api/portfolios', async (req, res) => {
   try {
     const result = await pool.query(
@@ -226,46 +188,31 @@ app.get('/api/portfolios', async (req, res) => {
 
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching all portfolios:', error);
-    res.status(500).json({ error: 'Failed to fetch portfolios' });
+    console.error('❌ Fetch all portfolios error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Delete portfolio
 app.delete('/api/portfolios/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Soft delete - set active = false
     await pool.query(
       'UPDATE portfolios SET active = false WHERE id = $1',
       [id]
     );
     
-    console.log(`✅ Portfolio ${id} deleted (soft delete)`);
+    console.log(`✅ Portfolio ${id} deleted`);
     res.json({ success: true, message: 'Portfolio deleted' });
   } catch (error) {
-    console.error('Error deleting portfolio:', error);
-    res.status(500).json({ error: 'Failed to delete portfolio' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Start server
 app.listen(PORT, async () => {
   console.log(`🚀 AutoFolio Backend running on port ${PORT}`);
   await initDatabase();
-  
-  // Update prices immediately and then every 10 minutes
   await updatePrices();
   setInterval(updatePrices, PRICE_CACHE_DURATION);
-  console.log('⏰ Price updates scheduled every 10 minutes');
+  console.log('⏰ Price updates scheduled');
 });
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, closing database pool');
-  await pool.end();
-  process.exit(0);
-});
-
-"Force redeploy"
