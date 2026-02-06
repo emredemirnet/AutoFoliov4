@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWallet } from './WalletConnection.jsx';
 
-const PortfolioCreate = () => {
+const PortfolioCreate = ({ presetTargets, presetThreshold, presetName }) => {
   const { wallet, connected } = useWallet();
   
   // Available tokens with all asset types
@@ -25,15 +25,35 @@ const PortfolioCreate = () => {
     SILVER: { name: 'Silver', type: 'commodity' },
   };
 
-  const [portfolioName, setPortfolioName] = useState('My Portfolio');
-  const [targets, setTargets] = useState([
-    { symbol: 'SOL', percent: 30 },
-    { symbol: 'USDC', percent: 70 }
-  ]);
-  const [threshold, setThreshold] = useState(10);
+  const getInitialTargets = () => {
+    if (presetTargets && presetTargets.length > 0) {
+      return presetTargets;
+    }
+    return [
+      { symbol: 'SOL', percent: 30 },
+      { symbol: 'USDC', percent: 70 }
+    ];
+  };
+
+  const [portfolioName, setPortfolioName] = useState(presetName || 'My Portfolio');
+  const [targets, setTargets] = useState(getInitialTargets());
+  const [threshold, setThreshold] = useState(presetThreshold || 10);
   const [availableTokens, setAvailableTokens] = useState([]);
   const [creating, setCreating] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  // Update when preset changes
+  useEffect(() => {
+    if (presetTargets && presetTargets.length > 0) {
+      setTargets(presetTargets);
+    }
+    if (presetThreshold) {
+      setThreshold(presetThreshold);
+    }
+    if (presetName) {
+      setPortfolioName(presetName);
+    }
+  }, [presetTargets, presetThreshold, presetName]);
 
   useEffect(() => {
     const used = targets.map(t => t.symbol);
@@ -75,7 +95,6 @@ const PortfolioCreate = () => {
 
       if (response.ok) {
         setSuccess(true);
-        // Redirect to dashboard after 1 second
         setTimeout(() => {
           if (window.onPortfolioCreated) {
             window.onPortfolioCreated();
