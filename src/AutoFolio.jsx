@@ -434,26 +434,24 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
           border-color: rgba(34, 211, 238, 0.3);
           box-shadow: 0 8px 32px rgba(34, 211, 238, 0.08);
         }
-        input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; }
+        input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; height: 16px; }
         input[type="range"]::-webkit-slider-track {
           background: linear-gradient(90deg, rgba(34, 211, 238, 0.15) 0%, rgba(6, 182, 212, 0.25) 100%);
-          height: 8px; border-radius: 4px;
+          height: 4px; border-radius: 2px;
         }
         input[type="range"]::-webkit-slider-thumb {
-          -webkit-appearance: none; appearance: none; height: 20px; width: 20px; border-radius: 50%;
+          -webkit-appearance: none; appearance: none; height: 14px; width: 14px; border-radius: 50%;
           background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
-          cursor: pointer; margin-top: -6px;
-          box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.2); transition: all 0.2s ease;
+          cursor: pointer; margin-top: -5px;
         }
-        input[type="range"]::-webkit-slider-thumb:hover { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.3); transform: scale(1.1); }
         input[type="range"]::-moz-range-track {
           background: linear-gradient(90deg, rgba(34, 211, 238, 0.15) 0%, rgba(6, 182, 212, 0.25) 100%);
-          height: 8px; border-radius: 4px;
+          height: 4px; border-radius: 2px;
         }
         input[type="range"]::-moz-range-thumb {
-          height: 20px; width: 20px; border-radius: 50%;
+          height: 14px; width: 14px; border-radius: 50%;
           background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
-          cursor: pointer; border: none; box-shadow: 0 0 0 4px rgba(34, 211, 238, 0.2);
+          cursor: pointer; border: none;
         }
         .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
@@ -508,33 +506,24 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
 
         {/* Simulation */}
         {(!connected || activeTab === 'simulate') && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div className="lg:col-span-1">
-            <div className="jup-card rounded-2xl p-4 transition-all duration-300">
-              <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                <span className="text-xl">⚡</span>
-                <span>Portfolio Builder</span>
-              </h2>
+            <div className="jup-card rounded-xl p-3 transition-all duration-300">
               
-              <div className="mb-4 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                <p className="text-xs text-cyan-300 leading-relaxed">
-                  💡 <strong>Backtest Your Strategy:</strong> Uses real historical price data from the last 12 months to show how automated rebalancing would have performed.
-                </p>
-              </div>
-              
-              <div className="mb-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
+              {/* Assets row */}
+              <div className="mb-2 p-2 bg-gray-800/50 border border-gray-700 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-semibold text-gray-300">Assets</span>
                   <button onClick={() => setIsAddingAsset(!isAddingAsset)}
-                    className="text-xs px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded transition">+ Add</button>
+                    className="text-xs px-2 py-0.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded transition">+ Add</button>
                 </div>
                 
                 {isAddingAsset && (
-                  <div className="mt-2 p-2 bg-gray-900/50 rounded">
+                  <div className="mt-1 p-2 bg-gray-900/50 rounded">
                     <input type="text" placeholder="Search..." value={assetSearch}
                       onChange={(e) => setAssetSearch(e.target.value)}
-                      className="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-white mb-2" />
-                    <div className="space-y-1 max-h-32 overflow-y-auto">
+                      className="w-full px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-white mb-1" />
+                    <div className="space-y-1 max-h-24 overflow-y-auto">
                       {Object.entries(availableAssets)
                         .filter(([symbol, data]) => 
                           !selectedAssets.includes(symbol) &&
@@ -557,30 +546,31 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                   </div>
                 )}
                 
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1">
                   {selectedAssets.map(asset => (
-                    <div key={asset} className="px-2 py-1 bg-gray-700/50 rounded text-xs flex items-center gap-1">
+                    <div key={asset} className="px-1.5 py-0.5 bg-gray-700/50 rounded text-xs flex items-center gap-1">
                       <span style={{ color: assetColors[asset] }}>{asset}</span>
                       {selectedAssets.length > 2 && (
                         <button onClick={() => {
                             setSelectedAssets(selectedAssets.filter(a => a !== asset));
                             const newAllocations = {...allocations}; delete newAllocations[asset]; setAllocations(newAllocations);
-                          }} className="text-red-400 hover:text-red-300 ml-1">×</button>
+                          }} className="text-red-400 hover:text-red-300">×</button>
                       )}
                     </div>
                   ))}
                 </div>
               </div>
               
-              <div className="space-y-5">
+              {/* Compact sliders */}
+              <div className="space-y-1.5">
                 {assets.map(asset => (
                   <div key={asset}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full animate-pulse-slow" style={{ backgroundColor: assetColors[asset] }}></div>
-                        <label className="text-sm font-semibold" style={{ color: assetColors[asset] }}>{asset}</label>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: assetColors[asset] }}></div>
+                        <label className="text-xs font-semibold" style={{ color: assetColors[asset] }}>{asset}</label>
                       </div>
-                      <span className="text-lg font-bold jup-gradient-text">{allocations[asset]}%</span>
+                      <span className="text-sm font-bold jup-gradient-text">{allocations[asset]}%</span>
                     </div>
                     <input type="range" min="0" max="100" value={allocations[asset]}
                       onChange={(e) => handleAllocationChange(asset, parseInt(e.target.value))} />
@@ -588,26 +578,26 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                 ))}
               </div>
 
-              <div className="mt-6 pt-6 border-t border-gray-800">
-                <div className="mb-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-semibold text-gray-300">Rebalance Threshold</label>
-                    <span className="text-lg font-bold jup-gradient-text">{deviationThreshold}%</span>
-                  </div>
-                  <input type="range" min="5" max="30" step="1" value={deviationThreshold}
-                    onChange={(e) => setDeviationThreshold(parseInt(e.target.value))} />
-                  <p className="text-xs text-gray-500 mt-2">
-                    {deviationThreshold <= 10 && "🔥 Aggressive rebalancing"}
-                    {deviationThreshold > 10 && deviationThreshold <= 20 && "⚖️ Balanced approach"}
-                    {deviationThreshold > 20 && "🌙 Conservative drift"}
-                  </p>
+              {/* Threshold */}
+              <div className="mt-2 pt-2 border-t border-gray-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-300">Threshold</label>
+                  <span className="text-sm font-bold jup-gradient-text">{deviationThreshold}%</span>
                 </div>
+                <input type="range" min="5" max="30" step="1" value={deviationThreshold}
+                  onChange={(e) => setDeviationThreshold(parseInt(e.target.value))} />
+                <p className="text-xs text-gray-500">
+                  {deviationThreshold <= 10 && "🔥 Aggressive"}
+                  {deviationThreshold > 10 && deviationThreshold <= 20 && "⚖️ Balanced"}
+                  {deviationThreshold > 20 && "🌙 Conservative"}
+                </p>
               </div>
 
-              <div className="pt-5 border-t border-gray-800">
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-sm font-medium text-gray-400">Total</span>
-                  <span className={`text-2xl font-bold ${Math.abs(totalAllocation - 100) < 0.01 ? 'jup-gradient-text' : 'text-red-400'}`}>
+              {/* Total + Button */}
+              <div className="mt-2 pt-2 border-t border-gray-800">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-medium text-gray-400">Total</span>
+                  <span className={`text-lg font-bold ${Math.abs(totalAllocation - 100) < 0.01 ? 'jup-gradient-text' : 'text-red-400'}`}>
                     {totalAllocation}%
                   </span>
                 </div>
@@ -615,16 +605,16 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                 <button onClick={runSimulation}
                   disabled={Math.abs(totalAllocation - 100) > 0.01 || loadingHistorical}
                   className="w-full jup-gradient disabled:opacity-30 disabled:cursor-not-allowed
-                           text-[#0D0F14] font-bold py-4 px-6 rounded-xl transition-all duration-300
+                           text-[#0D0F14] font-bold py-2.5 px-4 rounded-lg transition-all duration-300
                            transform hover:scale-[1.02] active:scale-95 text-sm
                            shadow-lg shadow-cyan-400/20 disabled:shadow-none">
-                  {loadingHistorical ? '⏳ Loading price data...' : Math.abs(totalAllocation - 100) > 0.01 ? '⚠ Adjust to 100%' : '✓ Run Backtest'}
+                  {loadingHistorical ? '⏳ Loading...' : Math.abs(totalAllocation - 100) > 0.01 ? '⚠ Adjust to 100%' : '✓ Run Backtest'}
                 </button>
 
                 {connected && simulationData && (
                   <button onClick={() => setActiveTab('create')}
-                    className="w-full mt-3 py-3 px-6 rounded-xl font-bold text-sm bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition">
-                    ✅ Happy with results? Create this portfolio →
+                    className="w-full mt-2 py-2 px-4 rounded-lg font-bold text-xs bg-green-500/20 border border-green-500/50 text-green-400 hover:bg-green-500/30 transition">
+                    ✅ Create this portfolio →
                   </button>
                 )}
               </div>
