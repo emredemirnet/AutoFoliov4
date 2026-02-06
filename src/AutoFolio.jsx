@@ -56,13 +56,38 @@ const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Now'];
 
 const AutoFolio = ({ presetStrategy }) => {
-  const [allocations, setAllocations] = useState({
-    SOL: 40,
-    BTC: 30,
-    USDC: 30
-  });
-  
-  const [selectedAssets, setSelectedAssets] = useState(['SOL', 'BTC', 'USDC']);
+  // Initialize with preset strategy if provided
+  const getInitialAllocations = () => {
+    if (presetStrategy && presetStrategy.allocation) {
+      const allocs = {};
+      presetStrategy.allocation.forEach(item => {
+        allocs[item.asset] = item.percent;
+      });
+      return allocs;
+    }
+    return {
+      SOL: 40,
+      BTC: 30,
+      USDC: 30
+    };
+  };
+
+  const getInitialAssets = () => {
+    if (presetStrategy && presetStrategy.allocation) {
+      return presetStrategy.allocation.map(item => item.asset);
+    }
+    return ['SOL', 'BTC', 'USDC'];
+  };
+
+  const getInitialThreshold = () => {
+    if (presetStrategy && presetStrategy.threshold) {
+      return presetStrategy.threshold;
+    }
+    return 10;
+  };
+
+  const [allocations, setAllocations] = useState(getInitialAllocations());
+  const [selectedAssets, setSelectedAssets] = useState(getInitialAssets());
   const [isAddingAsset, setIsAddingAsset] = useState(false);
   const [assetSearch, setAssetSearch] = useState('');
   const { wallet, connected } = useWallet();
@@ -72,16 +97,28 @@ const AutoFolio = ({ presetStrategy }) => {
   const [walletBalances, setWalletBalances] = useState(null);
   const [loadingPrices, setLoadingPrices] = useState(false);
   
-  // Available assets
+  // Available assets - NOW WITH STOCKS AND COMMODITIES
   const availableAssets = {
+    // Crypto
     BTC: { name: 'Bitcoin', type: 'crypto', color: '#F7931A' },
     ETH: { name: 'Ethereum', type: 'crypto', color: '#627EEA' },
     SOL: { name: 'Solana', type: 'crypto', color: '#14F195' },
     USDC: { name: 'USD Coin', type: 'crypto', color: '#2775CA' },
     USDT: { name: 'Tether', type: 'crypto', color: '#26A17B' },
+    
+    // Stocks
+    AAPL: { name: 'Apple', type: 'stock', color: '#A2AAAD' },
+    TSLA: { name: 'Tesla', type: 'stock', color: '#E31937' },
+    NVDA: { name: 'NVIDIA', type: 'stock', color: '#76B900' },
+    MSFT: { name: 'Microsoft', type: 'stock', color: '#00A4EF' },
+    GOOGL: { name: 'Google', type: 'stock', color: '#4285F4' },
+    
+    // Commodities
+    GOLD: { name: 'Gold', type: 'commodity', color: '#FFD700' },
+    SILVER: { name: 'Silver', type: 'commodity', color: '#C0C0C0' },
   };
   
-  const [deviationThreshold, setDeviationThreshold] = useState(10);
+  const [deviationThreshold, setDeviationThreshold] = useState(getInitialThreshold());
   const [simulationData, setSimulationData] = useState(null);
   const [rebalancePoints, setRebalancePoints] = useState([]);
 
@@ -90,6 +127,16 @@ const AutoFolio = ({ presetStrategy }) => {
   const assetColors = Object.fromEntries(
     selectedAssets.map(asset => [asset, availableAssets[asset]?.color || '#888888'])
   );
+
+  // Auto-run simulation when preset strategy is loaded
+  useEffect(() => {
+    if (presetStrategy) {
+      // Wait for allocations to be set, then run simulation
+      setTimeout(() => {
+        runSimulation();
+      }, 200);
+    }
+  }, [presetStrategy]);
 
   // Fetch real prices on mount
   useEffect(() => {
@@ -145,7 +192,14 @@ const AutoFolio = ({ presetStrategy }) => {
       ETH: 2200,
       SOL: 98,
       USDC: 1,
-      USDT: 1
+      USDT: 1,
+      AAPL: 180,
+      TSLA: 250,
+      NVDA: 500,
+      MSFT: 380,
+      GOOGL: 140,
+      GOLD: 2000,
+      SILVER: 24,
     };
 
     return {
@@ -154,6 +208,13 @@ const AutoFolio = ({ presetStrategy }) => {
       SOL: generateMeanRevertingData(basePrices.SOL || 98, 0.07, 'SOL'),
       USDC: Array(365).fill(1),
       USDT: Array(365).fill(1),
+      AAPL: generateMeanRevertingData(basePrices.AAPL || 180, 0.03, 'AAPL'),
+      TSLA: generateMeanRevertingData(basePrices.TSLA || 250, 0.06, 'TSLA'),
+      NVDA: generateMeanRevertingData(basePrices.NVDA || 500, 0.05, 'NVDA'),
+      MSFT: generateMeanRevertingData(basePrices.MSFT || 380, 0.04, 'MSFT'),
+      GOOGL: generateMeanRevertingData(basePrices.GOOGL || 140, 0.04, 'GOOGL'),
+      GOLD: generateMeanRevertingData(basePrices.GOLD || 2000, 0.02, 'GOLD'),
+      SILVER: generateMeanRevertingData(basePrices.SILVER || 24, 0.03, 'SILVER'),
     };
   };
 
@@ -591,6 +652,7 @@ const AutoFolio = ({ presetStrategy }) => {
                 <div>
                   <div className="mb-6 grid grid-cols-3 gap-3">
                     <div className="bg-[#0D0F14] border border-gray-800 rounded-xl p-4">
+                      <div className="text-xs text-gray-500 mb-2">💰 Starting: $10,000</div>
                       <div className="text-xs font-medium text-gray-500 mb-1">Buy & Hold</div>
                       <div className="text-2xl font-bold text-blue-400">
                         ${simulationData[simulationData.length - 1].buyAndHold.toLocaleString()}
@@ -604,6 +666,7 @@ const AutoFolio = ({ presetStrategy }) => {
                       ? 'border-2 border-cyan-400 shadow-lg shadow-cyan-400/20' 
                       : 'border border-cyan-500/30'
                     }`}>
+                      <div className="text-xs text-gray-500 mb-2">💰 Starting: $10,000</div>
                       <div className="flex items-center justify-between mb-1">
                         <div className="text-xs font-medium text-cyan-400">AutoFolio</div>
                         {simulationData[simulationData.length - 1].autoFolio > simulationData[simulationData.length - 1].buyAndHold && (
@@ -623,6 +686,7 @@ const AutoFolio = ({ presetStrategy }) => {
                       )}
                     </div>
                     <div className="bg-[#0D0F14] border border-yellow-500/30 rounded-xl p-4">
+                      <div className="text-xs text-gray-500 mb-2">⚙️ Active Strategy</div>
                       <div className="text-xs font-medium text-yellow-400 mb-1">Rebalances</div>
                       <div className="text-2xl font-bold text-yellow-400">
                         {rebalancePoints.length}
