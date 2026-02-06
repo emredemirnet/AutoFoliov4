@@ -1,0 +1,14 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'IBM Plex Mono', monospace;
+  background: black;
+  color: white;
+}
+
+* {
+  box-sizing: border-box;
+}
