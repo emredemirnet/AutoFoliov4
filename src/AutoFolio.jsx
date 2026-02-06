@@ -135,6 +135,8 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
     NVDA: { name: 'NVIDIA', type: 'stock', color: '#76B900' },
     MSFT: { name: 'Microsoft', type: 'stock', color: '#00A4EF' },
     GOOGL: { name: 'Google', type: 'stock', color: '#4285F4' },
+    AMZN: { name: 'Amazon', type: 'stock', color: '#FF9900' },
+    META: { name: 'Meta', type: 'stock', color: '#0668E1' },
     GOLD: { name: 'Gold', type: 'commodity', color: '#FFD700' },
     SILVER: { name: 'Silver', type: 'commodity', color: '#C0C0C0' },
   };
@@ -739,7 +741,7 @@ const AutoFolio = ({ presetStrategy, onDashboard }) => {
 
         <div className="mt-6 bg-[#14171F]/40 border border-gray-800/50 rounded-xl p-3 text-center">
           <p className="text-xs text-gray-600">
-            📊 {historicalPrices ? '✅ Real historical data (CoinGecko)' : loadingHistorical ? '⏳ Loading historical data...' : '🟡 Using fallback data'} • {realPrices ? '✅ Live prices' : '⏳ Loading...'} • Connect wallet to create real portfolio
+            📊 {dataSource || (loadingHistorical ? '⏳ Loading historical data...' : '🟡 Using fallback data')} • {realPrices?._source ? `Live: ${realPrices._source}` : '⏳ Loading...'} • Crypto: CoinGecko • Stocks/Commodities: TwelveData
           </p>
         </div>
       </div>
