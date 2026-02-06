@@ -55,7 +55,7 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
 const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 364];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Now'];
 
-const AutoFolio = () => {
+const AutoFolio = ({ presetStrategy }) => {
   const [allocations, setAllocations] = useState({
     SOL: 40,
     BTC: 30,
