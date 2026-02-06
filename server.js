@@ -231,6 +231,25 @@ app.get('/api/portfolios', async (req, res) => {
   }
 });
 
+// Delete portfolio
+app.delete('/api/portfolios/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Soft delete - set active = false
+    await pool.query(
+      'UPDATE portfolios SET active = false WHERE id = $1',
+      [id]
+    );
+    
+    console.log(`✅ Portfolio ${id} deleted (soft delete)`);
+    res.json({ success: true, message: 'Portfolio deleted' });
+  } catch (error) {
+    console.error('Error deleting portfolio:', error);
+    res.status(500).json({ error: 'Failed to delete portfolio' });
+  }
+});
+
 // Start server
 app.listen(PORT, async () => {
   console.log(`🚀 AutoFolio Backend running on port ${PORT}`);
