@@ -1,0 +1,13 @@
+{
+  "headers": [
+    {
+      "source": "/src/(.*).jsx",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/javascript"
+        }
+      ]
+    }
+  ]
+}
