@@ -3,8 +3,9 @@ import ReactDOM from 'react-dom/client'
 import AutoFolio from './AutoFolio.js'
 import './index.css'
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <AutoFolio />
-  </React.StrictMode>,
-)
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  React.createElement(React.StrictMode, null,
+    React.createElement(AutoFolio, null)
+  )
+);
