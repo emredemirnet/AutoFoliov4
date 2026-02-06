@@ -75,7 +75,12 @@ const PortfolioCreate = () => {
 
       if (response.ok) {
         setSuccess(true);
-        setTimeout(() => setSuccess(false), 3000);
+        // Redirect to dashboard after 1 second
+        setTimeout(() => {
+          if (window.onPortfolioCreated) {
+            window.onPortfolioCreated();
+          }
+        }, 1000);
       }
     } catch (error) {
       console.error('Failed to create portfolio:', error);
