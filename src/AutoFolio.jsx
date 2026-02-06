@@ -55,7 +55,7 @@ const generateMeanRevertingData = (startPrice, baseVolatility, assetType) => {
 const DISPLAY_INTERVALS = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 364];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Now'];
 
-const AutoFolio = ({ presetStrategy }) => {
+const AutoFolio = ({ presetStrategy, onDashboard }) => {
   // Initialize with preset strategy if provided
   const getInitialAllocations = () => {
     if (presetStrategy && presetStrategy.allocation) {
@@ -137,6 +137,19 @@ const AutoFolio = ({ presetStrategy }) => {
       }, 200);
     }
   }, [presetStrategy]);
+
+  // Handle portfolio creation redirect
+  useEffect(() => {
+    window.onPortfolioCreated = () => {
+      if (onDashboard) {
+        onDashboard();
+      }
+    };
+    
+    return () => {
+      window.onPortfolioCreated = null;
+    };
+  }, [onDashboard]);
 
   // Fetch real prices on mount
   useEffect(() => {
