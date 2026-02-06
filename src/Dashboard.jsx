@@ -27,6 +27,29 @@ const Dashboard = () => {
     }
   };
 
+  const deletePortfolio = async (portfolioId, portfolioName) => {
+    if (!confirm(`Delete "${portfolioName}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `https://autofolio-backend-production.up.railway.app/api/portfolios/${portfolioId}`,
+        { method: 'DELETE' }
+      );
+
+      if (response.ok) {
+        alert('Portfolio deleted successfully!');
+        loadPortfolios(); // Reload list
+      } else {
+        alert('Failed to delete portfolio');
+      }
+    } catch (error) {
+      console.error('Error deleting portfolio:', error);
+      alert('Error deleting portfolio');
+    }
+  };
+
   if (!connected) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 flex items-center justify-center">
@@ -179,11 +202,7 @@ const Dashboard = () => {
                     ✏️ Edit Portfolio
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete "${portfolio.name}"? This cannot be undone.`)) {
-                        alert('Delete feature coming soon!');
-                      }
-                    }}
+                    onClick={() => deletePortfolio(portfolio.id, portfolio.name)}
                     className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-semibold transition"
                   >
                     🗑️ Delete
