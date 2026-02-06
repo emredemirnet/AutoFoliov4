@@ -36,16 +36,7 @@ const TOKENS = {
   SOL: 'So11111111111111111111111111111111111111112',
   USDC: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
   USDT: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
-  BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', // Wrapped BTC
-  // Add more as needed
-};
-
-// Pyth price feed IDs
-const PYTH_FEEDS = {
-  SOL: '0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d',
-  BTC: '0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43',
-  USDC: '0xeaa020c61cc479712813461ce153894a96a6c00b21ed0cfc2798d1f9a9e9c94a',
-  // Add more as needed
+  BTC: '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh',
 };
 
 // ============================================
@@ -96,49 +87,37 @@ async function initDatabase() {
 }
 
 // ============================================
-// PRICE FUNCTIONS (Pyth Network)
+// PRICE FUNCTIONS (Jupiter Price API v6)
 // ============================================
 
 async function getPrices() {
   try {
-    // Use Pyth HTTP endpoint for price data
-    const pythClient = new PythHttpClient(connection, [
-      new PublicKey('FsJ3A3u2vn5cTVofAjvy6y5kwABJAqYWpe4975bi2epH') // Pyth program
-    ]);
+    // Jupiter Price API v6 - Correct format
+    const mints = [
+      'So11111111111111111111111111111111111111112', // SOL
+      '3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh', // BTC (Wrapped)
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+      'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+    ].join(',');
 
-    const prices = {};
-    
-    // Fetch prices for each token
-    for (const [symbol, feedId] of Object.entries(PYTH_FEEDS)) {
-      try {
-        const price = await pythClient.getLatestPriceFeeds([feedId]);
-        if (price && price[0]) {
-          prices[symbol] = price[0].price;
-        } else {
-          prices[symbol] = 0;
-        }
-      } catch (err) {
-        console.error(`Error fetching ${symbol} price:`, err.message);
-        prices[symbol] = 0;
-      }
-    }
+    const response = await fetch(`https://api.jup.ag/price/v2?ids=${mints}`);
+    const data = await response.json();
 
-    // Fallback: Use Jupiter API for prices
-    const jupiterPrices = await fetch('https://price.jup.ag/v4/price?ids=SOL,BTC,USDC,USDT')
-      .then(r => r.json())
-      .catch(() => ({ data: {} }));
+    console.log('Jupiter API response:', data);
 
-    if (jupiterPrices.data) {
-      if (jupiterPrices.data.SOL) prices.SOL = jupiterPrices.data.SOL.price;
-      if (jupiterPrices.data.BTC) prices.BTC = jupiterPrices.data.BTC.price;
-      if (jupiterPrices.data.USDC) prices.USDC = jupiterPrices.data.USDC.price || 1;
-      if (jupiterPrices.data.USDT) prices.USDT = jupiterPrices.data.USDT.price || 1;
-    }
+    const prices = {
+      SOL: data.data?.['So11111111111111111111111111111111111111112']?.price || 0,
+      BTC: data.data?.['3NZ9JMVBmGAqocybic2c7LQCJScmgsAZ6vQqTDzcqmJh']?.price || 0,
+      USDC: data.data?.['EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v']?.price || 1,
+      USDT: data.data?.['Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB']?.price || 1,
+    };
 
+    console.log('✅ Fetched prices:', prices);
     return prices;
   } catch (error) {
     console.error('Error fetching prices:', error);
-    return { SOL: 100, BTC: 42000, USDC: 1, USDT: 1 }; // Fallback
+    // Fallback prices
+    return { SOL: 150, BTC: 95000, USDC: 1, USDT: 1 };
   }
 }
 
@@ -159,7 +138,7 @@ async function getWalletBalances(walletAddress) {
     });
 
     const balances = {
-      SOL: solBalance / 1e9 // Convert lamports to SOL
+      SOL: solBalance / 1e9
     };
 
     // Parse token balances
@@ -168,7 +147,6 @@ async function getWalletBalances(walletAddress) {
       const mint = data.mint;
       const amount = data.tokenAmount.uiAmount;
 
-      // Match mint to symbol
       for (const [symbol, tokenMint] of Object.entries(TOKENS)) {
         if (mint === tokenMint) {
           balances[symbol] = amount;
@@ -186,24 +164,20 @@ async function getWalletBalances(walletAddress) {
 
 async function checkPortfolioBalance(portfolio) {
   try {
-    // Get user wallet
     const userResult = await pool.query('SELECT wallet_address, email FROM users WHERE id = $1', [portfolio.user_id]);
     if (userResult.rows.length === 0) return;
     
     const { wallet_address, email } = userResult.rows[0];
 
-    // Get portfolio targets
     const targetsResult = await pool.query(
       'SELECT token_symbol, target_percent FROM portfolio_targets WHERE portfolio_id = $1',
       [portfolio.id]
     );
     const targets = targetsResult.rows;
 
-    // Get current balances
     const balances = await getWalletBalances(wallet_address);
     const prices = await getPrices();
 
-    // Calculate current allocations
     let totalValue = 0;
     const currentAllocations = {};
 
@@ -214,7 +188,6 @@ async function checkPortfolioBalance(portfolio) {
       currentAllocations[symbol] = { balance, value, price };
     }
 
-    // Check if rebalance needed
     let needsRebalance = false;
     const drifts = {};
 
@@ -239,7 +212,6 @@ async function checkPortfolioBalance(portfolio) {
     if (needsRebalance) {
       console.log(`⚠️  Portfolio ${portfolio.id} needs rebalancing`);
       
-      // Send email notification
       if (email) {
         await sendRebalanceNotification(email, portfolio, drifts, totalValue);
       }
@@ -272,7 +244,6 @@ async function getJupiterQuote(inputMint, outputMint, amount) {
 
 async function executeJupiterSwap(userWallet, quote) {
   try {
-    // Get swap transaction
     const swapResponse = await fetch('https://quote-api.jup.ag/v6/swap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -284,8 +255,6 @@ async function executeJupiterSwap(userWallet, quote) {
     });
 
     const { swapTransaction } = await swapResponse.json();
-    
-    // Return transaction for user to sign
     return swapTransaction;
   } catch (error) {
     console.error('Error executing Jupiter swap:', error);
@@ -331,7 +300,6 @@ AutoFolio Team`
 // API ENDPOINTS
 // ============================================
 
-// Create user
 app.post('/api/users', async (req, res) => {
   try {
     const { wallet_address, email } = req.body;
@@ -347,12 +315,10 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// Create portfolio
 app.post('/api/portfolios', async (req, res) => {
   try {
     const { wallet_address, name, threshold, targets } = req.body;
 
-    // Get or create user
     let userResult = await pool.query('SELECT id FROM users WHERE wallet_address = $1', [wallet_address]);
     let userId;
 
@@ -363,14 +329,12 @@ app.post('/api/portfolios', async (req, res) => {
       userId = userResult.rows[0].id;
     }
 
-    // Create portfolio
     const portfolioResult = await pool.query(
       'INSERT INTO portfolios (user_id, name, threshold) VALUES ($1, $2, $3) RETURNING *',
       [userId, name || 'My Portfolio', threshold || 10]
     );
     const portfolio = portfolioResult.rows[0];
 
-    // Add targets
     for (const target of targets) {
       await pool.query(
         'INSERT INTO portfolio_targets (portfolio_id, token_symbol, token_mint, target_percent) VALUES ($1, $2, $3, $4)',
@@ -384,7 +348,6 @@ app.post('/api/portfolios', async (req, res) => {
   }
 });
 
-// Get user portfolios
 app.get('/api/portfolios/:wallet_address', async (req, res) => {
   try {
     const { wallet_address } = req.params;
@@ -405,7 +368,6 @@ app.get('/api/portfolios/:wallet_address', async (req, res) => {
   }
 });
 
-// Get current prices
 app.get('/api/prices', async (req, res) => {
   try {
     const prices = await getPrices();
@@ -415,7 +377,6 @@ app.get('/api/prices', async (req, res) => {
   }
 });
 
-// Get wallet balances
 app.get('/api/balances/:wallet_address', async (req, res) => {
   try {
     const { wallet_address } = req.params;
@@ -437,7 +398,6 @@ app.get('/api/balances/:wallet_address', async (req, res) => {
   }
 });
 
-// Get Jupiter swap quote
 app.post('/api/swap/quote', async (req, res) => {
   try {
     const { inputToken, outputToken, amount } = req.body;
@@ -455,20 +415,15 @@ app.post('/api/swap/quote', async (req, res) => {
   }
 });
 
-// Execute rebalance (prepare transaction)
 app.post('/api/rebalance', async (req, res) => {
   try {
     const { portfolio_id, wallet_address } = req.body;
 
-    // Get portfolio check
     const check = await checkPortfolioBalance({ id: portfolio_id, user_id: 1, threshold: 10 });
 
     if (!check.needsRebalance) {
       return res.json({ message: 'Portfolio balanced, no rebalance needed' });
     }
-
-    // Calculate swaps needed
-    // TODO: Implement swap calculation logic
 
     res.json({ needsRebalance: true, drifts: check.drifts });
   } catch (error) {
@@ -476,7 +431,6 @@ app.post('/api/rebalance', async (req, res) => {
   }
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -502,7 +456,6 @@ async function monitorAllPortfolios() {
   }
 }
 
-// Run monitoring every 5 minutes
 setInterval(monitorAllPortfolios, 5 * 60 * 1000);
 
 // ============================================
@@ -519,7 +472,6 @@ async function start() {
       console.log(`🚀 AutoFolio backend running on port ${PORT}`);
       console.log(`📊 Monitoring service active`);
       
-      // Run initial check
       setTimeout(monitorAllPortfolios, 5000);
     });
   } catch (error) {
