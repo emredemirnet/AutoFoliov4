@@ -66,12 +66,12 @@ const runBacktest = (allocation, threshold, priceData) => {
     });
 
     if (needsRebal) {
-      // Apply 0.3% fee
+      // Apply 0.1% fee (Jupiter DEX)
       let fee = 0;
       assets.forEach(a => {
         const currentVal = holdings[a] * priceData[a][i];
         const targetVal = total * (allocation.find(x => x.asset === a).percent / 100);
-        if (targetVal > currentVal) fee += Math.abs(targetVal - currentVal) * 0.003;
+        if (targetVal > currentVal) fee += Math.abs(targetVal - currentVal) * 0.001;
       });
       total -= fee;
 
@@ -400,7 +400,7 @@ const LandingPage = ({ onSelectStrategy, onCustomize, onDocs }) => {
                 <span className="text-sm font-semibold text-gray-300">Fees:</span>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-400">Trading</span>
-                  <span className="text-sm font-bold text-cyan-400">0.3%</span>
+                  <span className="text-sm font-bold text-cyan-400">0.1%</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="text-xs text-gray-400">Platform</span>
