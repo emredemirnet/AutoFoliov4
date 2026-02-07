@@ -369,52 +369,50 @@ const LandingPage = ({ onSelectStrategy, onCustomize }) => {
           </div>
         </div>
 
-        {/* Fee Section */}
-        <div className="mb-16">
-          <div className="max-w-4xl mx-auto jup-card rounded-2xl p-6 border-2 border-cyan-400/30">
-            <div className="text-center mb-4">
-              <h2 className="text-2xl font-bold text-cyan-400 mb-1">💎 Fee Transparency</h2>
-              <p className="text-gray-400 text-sm">Crystal clear pricing. No hidden costs.</p>
+        {/* Fee + How It Works - Combined Clean Section */}
+        <div className="mb-16 max-w-5xl mx-auto">
+          
+          {/* How It Works */}
+          <div id="how-it-works" className="mb-10">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-cyan-400">How It Works</h2>
             </div>
-
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="text-center p-3 bg-gray-800/50 rounded-xl">
-                <div className="text-xs text-gray-400 mb-1">Trading Fee</div>
-                <div className="text-xl font-bold text-cyan-400">0.3%</div>
-                <div className="text-xs text-gray-500">per swap</div>
-              </div>
-              <div className="text-center p-3 bg-gray-800/50 rounded-xl">
-                <div className="text-xs text-gray-400 mb-1">Platform Fee</div>
-                <div className="text-xl font-bold text-green-400">FREE</div>
-                <div className="text-xs text-gray-500">No management fees</div>
-              </div>
-              <div className="text-center p-3 bg-gray-800/50 rounded-xl">
-                <div className="text-xs text-gray-400 mb-1">Withdrawal</div>
-                <div className="text-xl font-bold text-cyan-400">$0</div>
-                <div className="text-xs text-gray-500">Network fees only</div>
-              </div>
+            <div className="grid grid-cols-4 gap-4">
+              {[
+                { num: '1', title: 'Connect Wallet', desc: 'Any Solana wallet' },
+                { num: '2', title: 'Choose Strategy', desc: 'Preset or custom' },
+                { num: '3', title: 'Deposit Funds', desc: 'Start from $100' },
+                { num: '4', title: 'Auto-Rebalance', desc: '24/7 monitoring' },
+              ].map((item, idx) => (
+                <div key={idx} className="text-center jup-card rounded-xl p-4">
+                  <div className="w-8 h-8 mx-auto mb-2 rounded-full bg-cyan-500/20 border border-cyan-400/50 flex items-center justify-center text-cyan-400 font-bold text-sm">{item.num}</div>
+                  <div className="text-sm font-bold text-white mb-1">{item.title}</div>
+                  <div className="text-xs text-gray-500">{item.desc}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        {/* How It Works */}
-        <div id="how-it-works" className="mb-16">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-cyan-400 mb-2">How It Works</h2>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {[
-              { step: '1️⃣', title: 'Connect Wallet', desc: 'Phantom, Solflare' },
-              { step: '2️⃣', title: 'Choose Strategy', desc: 'Preset or Custom' },
-              { step: '3️⃣', title: 'Deposit Funds', desc: 'Starts at $100' },
-              { step: '4️⃣', title: 'Earn More', desc: '24/7 automated' },
-            ].map((item, idx) => (
-              <div key={idx} className="text-center">
-                <div className="text-4xl mb-2">{item.step}</div>
-                <div className="text-base font-bold text-cyan-400 mb-1">{item.title}</div>
-                <div className="text-xs text-gray-400">{item.desc}</div>
+          {/* Fees - Inline */}
+          <div className="jup-card rounded-xl p-4 border border-cyan-400/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-6">
+                <span className="text-sm font-semibold text-gray-300">Fees:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">Trading</span>
+                  <span className="text-sm font-bold text-cyan-400">0.3%</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">Platform</span>
+                  <span className="text-sm font-bold text-green-400">FREE</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-gray-400">Withdrawal</span>
+                  <span className="text-sm font-bold text-cyan-400">$0</span>
+                </div>
               </div>
-            ))}
+              <span className="text-xs text-gray-500">No hidden costs</span>
+            </div>
           </div>
         </div>
       </div>
