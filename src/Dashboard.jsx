@@ -2,22 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { useWallet, portfolioAPI } from './WalletConnection.jsx';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceDot } from 'recharts';
 
-const Dashboard = () => {
+const API_URL = 'https://autofolio-backend-production.up.railway.app';
+
+const AVAILABLE_TOKENS = {
+  SOL: 'Solana', BTC: 'Bitcoin', ETH: 'Ethereum', USDC: 'USD Coin', USDT: 'Tether',
+  TSLA: 'Tesla', AAPL: 'Apple', NVDA: 'NVIDIA', MSFT: 'Microsoft', GOOGL: 'Google',
+  AMZN: 'Amazon', META: 'Meta', GOLD: 'Gold', SILVER: 'Silver',
+};
+
+const Dashboard = ({ onBack }) => {
   const { wallet, connected } = useWallet();
   const [portfolios, setPortfolios] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState(null);
+  const [editTargets, setEditTargets] = useState([]);
+  const [editThreshold, setEditThreshold] = useState(10);
+  const [editName, setEditName] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (connected && wallet) {
-      loadPortfolios();
-    }
+    if (connected && wallet) loadPortfolios();
   }, [connected, wallet]);
 
   const loadPortfolios = async () => {
     try {
-      const response = await fetch(
-        `https://autofolio-backend-production.up.railway.app/api/portfolios/${wallet}`
-      );
+      const response = await fetch(`${API_URL}/api/portfolios/${wallet}`);
       const data = await response.json();
       setPortfolios(data);
     } catch (error) {
@@ -28,53 +37,84 @@ const Dashboard = () => {
   };
 
   const deletePortfolio = async (portfolioId, portfolioName) => {
-    if (!confirm(`Delete "${portfolioName}"? This cannot be undone.`)) {
+    if (!confirm(`Delete "${portfolioName}"? This cannot be undone.`)) return;
+    try {
+      const response = await fetch(`${API_URL}/api/portfolios/${portfolioId}`, { method: 'DELETE' });
+      if (response.ok) { loadPortfolios(); }
+      else { alert('Failed to delete portfolio'); }
+    } catch (error) { alert('Error deleting portfolio'); }
+  };
+
+  const startEditing = (portfolio) => {
+    setEditingId(portfolio.id);
+    setEditTargets([...portfolio.targets]);
+    setEditThreshold(portfolio.threshold);
+    setEditName(portfolio.name);
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditTargets([]);
+  };
+
+  const updateEditTarget = (idx, field, value) => {
+    const newTargets = [...editTargets];
+    newTargets[idx] = { ...newTargets[idx], [field]: field === 'percent' ? parseInt(value) || 0 : value };
+    setEditTargets(newTargets);
+  };
+
+  const addEditTarget = (symbol) => {
+    if (editTargets.find(t => t.symbol === symbol)) return;
+    setEditTargets([...editTargets, { symbol, percent: 0 }]);
+  };
+
+  const removeEditTarget = (idx) => {
+    setEditTargets(editTargets.filter((_, i) => i !== idx));
+  };
+
+  const saveEdit = async () => {
+    const total = editTargets.reduce((sum, t) => sum + t.percent, 0);
+    if (Math.abs(total - 100) > 0.01) {
+      alert(`Allocations must equal 100%. Currently: ${total}%`);
+      return;
+    }
+    if (editTargets.length < 2) {
+      alert('Need at least 2 assets');
       return;
     }
 
+    setSaving(true);
     try {
-      const response = await fetch(
-        `https://autofolio-backend-production.up.railway.app/api/portfolios/${portfolioId}`,
-        { method: 'DELETE' }
-      );
-
+      const response = await fetch(`${API_URL}/api/portfolios/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editName, targets: editTargets, threshold: editThreshold }),
+      });
       if (response.ok) {
-        alert('Portfolio deleted successfully!');
+        setEditingId(null);
         loadPortfolios();
       } else {
-        alert('Failed to delete portfolio');
+        alert('Failed to save changes');
       }
     } catch (error) {
-      console.error('Error deleting portfolio:', error);
-      alert('Error deleting portfolio');
+      alert('Error saving changes');
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Generate chart data points starting from portfolio creation date
   const getChartData = (portfolio) => {
     const createdAt = portfolio.created_at ? new Date(portfolio.created_at) : new Date();
     const now = new Date();
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    // Generate 5 data points from creation to 3 months in the future
     const points = [];
-    const totalDays = 90; // 3 months projection
     const daysSinceCreation = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
-    
-    // Starting value
     const startValue = 1000;
     let currentValue = startValue;
-    
-    // Point 1: Creation date
     const formatDate = (d) => `${monthNames[d.getMonth()]} ${d.getDate()}`;
     
-    points.push({
-      date: formatDate(createdAt),
-      value: startValue,
-      rebalance: false
-    });
+    points.push({ date: formatDate(createdAt), value: startValue, rebalance: false });
 
-    // Generate intermediate points
     const intervals = [
       { daysFromStart: Math.min(daysSinceCreation, 15), rebalance: daysSinceCreation >= 15 },
       { daysFromStart: Math.min(daysSinceCreation, 30), rebalance: false },
@@ -82,57 +122,32 @@ const Dashboard = () => {
       { daysFromStart: Math.min(daysSinceCreation, 60), rebalance: false },
     ];
 
-    // Simulate some growth
     let rebalanceCount = 0;
     intervals.forEach((interval) => {
       if (interval.daysFromStart > 0) {
         const d = new Date(createdAt);
         d.setDate(d.getDate() + interval.daysFromStart);
-        
-        // Only add if date is not in the future
         if (d <= now) {
-          const dailyReturn = 0.002 + (Math.random() * 0.003); // 0.2-0.5% daily
+          const dailyReturn = 0.002 + (Math.random() * 0.003);
           currentValue = currentValue * (1 + dailyReturn * interval.daysFromStart / intervals.length);
-          
-          if (interval.rebalance) {
-            rebalanceCount++;
-          }
-          
-          points.push({
-            date: formatDate(d),
-            value: Math.round(currentValue * 100) / 100,
-            rebalance: interval.rebalance
-          });
+          if (interval.rebalance) rebalanceCount++;
+          points.push({ date: formatDate(d), value: Math.round(currentValue * 100) / 100, rebalance: interval.rebalance });
         }
       }
     });
 
-    // Add today's point if portfolio is at least 1 day old
     if (daysSinceCreation >= 1) {
       currentValue = currentValue * (1 + 0.003 * Math.max(1, daysSinceCreation / 10));
-      points.push({
-        date: 'Today',
-        value: Math.round(currentValue * 100) / 100,
-        rebalance: false
-      });
+      points.push({ date: 'Today', value: Math.round(currentValue * 100) / 100, rebalance: false });
     }
 
-    // Remove duplicate dates
     const uniquePoints = [];
     const seenDates = new Set();
     for (const point of points) {
-      if (!seenDates.has(point.date)) {
-        seenDates.add(point.date);
-        uniquePoints.push(point);
-      }
+      if (!seenDates.has(point.date)) { seenDates.add(point.date); uniquePoints.push(point); }
     }
 
-    return {
-      chartData: uniquePoints,
-      currentValue: currentValue,
-      gain: ((currentValue - startValue) / startValue * 100),
-      rebalanceCount: rebalanceCount
-    };
+    return { chartData: uniquePoints, currentValue, gain: ((currentValue - startValue) / startValue * 100), rebalanceCount };
   };
 
   if (!connected) {
@@ -154,146 +169,184 @@ const Dashboard = () => {
     );
   }
 
+  const editTotal = editTargets.reduce((sum, t) => sum + t.percent, 0);
+  const usedSymbols = editTargets.map(t => t.symbol);
+  const availableForAdd = Object.keys(AVAILABLE_TOKENS).filter(s => !usedSymbols.includes(s));
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-8">
+    <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-black text-gray-100 p-6" style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap');
+        input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; width: 100%; height: 16px; }
+        input[type="range"]::-webkit-slider-track { background: rgba(34, 211, 238, 0.2); height: 4px; border-radius: 2px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #22d3ee; cursor: pointer; margin-top: -5px; }
+      `}</style>
+
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-4xl font-bold text-cyan-400">My Portfolios</h1>
-          <button
-            onClick={() => window.location.href = '/'}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-semibold transition"
-          >
-            ← Back to Home
-          </button>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-cyan-400">My Portfolios</h1>
+          {onBack && (
+            <button onClick={onBack}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg font-semibold transition text-sm">
+              ← Back to Home
+            </button>
+          )}
         </div>
 
         {portfolios.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-xl text-gray-400 mb-6">No portfolios yet</p>
-            <a
-              href="/"
-              className="px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-600 text-gray-900 font-bold rounded-xl"
-            >
-              Create Portfolio
-            </a>
+            {onBack && (
+              <button onClick={onBack}
+                className="px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-600 text-gray-900 font-bold rounded-xl">
+                Create Portfolio
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
             {portfolios.map((portfolio) => {
               const { chartData, currentValue, gain, rebalanceCount } = getChartData(portfolio);
               const rebalancePointsData = chartData.filter(p => p.rebalance);
+              const isEditing = editingId === portfolio.id;
               
               return (
-                <div
-                  key={portfolio.id}
-                  className="bg-gray-800/50 border border-cyan-400/30 rounded-xl p-6"
-                >
-                  <h3 className="text-2xl font-bold text-cyan-400 mb-4">
-                    {portfolio.name}
-                  </h3>
+                <div key={portfolio.id} className="bg-gray-800/50 border border-cyan-400/30 rounded-xl p-5">
+                  
+                  {/* Header */}
+                  {isEditing ? (
+                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                      className="text-2xl font-bold text-cyan-400 bg-transparent border-b-2 border-cyan-400 outline-none mb-3 w-full" />
+                  ) : (
+                    <h3 className="text-2xl font-bold text-cyan-400 mb-1">{portfolio.name}</h3>
+                  )}
+                  
                   <div className="text-sm text-gray-400 mb-4">
-                    Threshold: {portfolio.threshold}%
+                    Threshold: {isEditing ? `${editThreshold}%` : `${portfolio.threshold}%`}
                     {portfolio.created_at && (
-                      <span className="ml-4">
-                        Created: {new Date(portfolio.created_at).toLocaleDateString()}
-                      </span>
+                      <span className="ml-4">Created: {new Date(portfolio.created_at).toLocaleDateString()}</span>
                     )}
                   </div>
 
-                  {/* PERFORMANCE CHART */}
-                  <div className="mb-6 bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-semibold text-gray-300">📈 Performance</h4>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">Starting Value</div>
-                          <div className="text-sm font-bold text-gray-400">$1,000.00</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">Current Value</div>
-                          <div className="text-sm font-bold text-cyan-400">${currentValue.toFixed(2)}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-gray-500">Gain</div>
-                          <div className={`text-sm font-bold ${gain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
+                  {/* Chart - hide when editing */}
+                  {!isEditing && (
+                    <div className="mb-4 bg-gray-900/50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-300">📈 Performance</h4>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="text-xs text-gray-500">Starting</div>
+                            <div className="text-sm font-bold text-gray-400">$1,000</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-500">Current</div>
+                            <div className="text-sm font-bold text-cyan-400">${currentValue.toFixed(2)}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xs text-gray-500">Gain</div>
+                            <div className={`text-sm font-bold ${gain >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {gain >= 0 ? '+' : ''}{gain.toFixed(1)}%
+                            </div>
                           </div>
                         </div>
                       </div>
+                      <ResponsiveContainer width="100%" height={120}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
+                          <XAxis dataKey="date" stroke="#6b7280" style={{ fontSize: '10px' }} />
+                          <YAxis stroke="#6b7280" style={{ fontSize: '10px' }} tickFormatter={(v) => `$${v}`} />
+                          <Tooltip contentStyle={{ backgroundColor: '#14171F', border: '1px solid rgba(34, 211, 238, 0.2)', borderRadius: '8px', fontSize: '11px' }} formatter={(v) => [`$${v}`, 'Value']} />
+                          <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={2} dot={false} />
+                          {rebalancePointsData.map((point, idx) => (
+                            <ReferenceDot key={idx} x={point.date} y={point.value} r={4} fill="#fbbf24" stroke="#f59e0b" strokeWidth={2} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
-                    
-                    <ResponsiveContainer width="100%" height={150}>
-                      <LineChart data={chartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" opacity={0.3} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#6b7280" 
-                          style={{ fontSize: '10px' }}
-                        />
-                        <YAxis 
-                          stroke="#6b7280"
-                          style={{ fontSize: '10px' }}
-                          tickFormatter={(value) => `$${value}`}
-                        />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: '#14171F', 
-                            border: '1px solid rgba(34, 211, 238, 0.2)',
-                            borderRadius: '8px',
-                            fontSize: '11px'
-                          }}
-                          formatter={(value) => [`$${value}`, 'Value']}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke="#22d3ee" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                        {rebalancePointsData.map((point, idx) => (
-                          <ReferenceDot
-                            key={idx}
-                            x={point.date}
-                            y={point.value}
-                            r={4}
-                            fill="#fbbf24"
-                            stroke="#f59e0b"
-                            strokeWidth={2}
-                          />
-                        ))}
-                      </LineChart>
-                    </ResponsiveContainer>
-                    
-                    <div className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-                      <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
-                      <span>Rebalance points ({rebalanceCount} total)</span>
-                    </div>
-                  </div>
+                  )}
 
-                  <div className="space-y-2">
-                    {portfolio.targets.map((target) => (
-                      <div key={target.symbol} className="flex justify-between">
-                        <span>{target.symbol}</span>
-                        <span className="text-cyan-400">{target.percent}%</span>
+                  {/* Edit Mode */}
+                  {isEditing ? (
+                    <div className="mb-4 bg-gray-900/50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-300">Edit Allocations</h4>
+                        <span className={`text-sm font-bold ${Math.abs(editTotal - 100) < 0.01 ? 'text-green-400' : 'text-red-400'}`}>
+                          Total: {editTotal}%
+                        </span>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="space-y-2">
+                        {editTargets.map((target, idx) => (
+                          <div key={idx} className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-cyan-400 w-14">{target.symbol}</span>
+                            <input type="range" min="0" max="100" value={target.percent}
+                              onChange={(e) => updateEditTarget(idx, 'percent', e.target.value)}
+                              className="flex-1" />
+                            <span className="text-sm font-bold text-white w-10 text-right">{target.percent}%</span>
+                            {editTargets.length > 2 && (
+                              <button onClick={() => removeEditTarget(idx)} className="text-red-400 hover:text-red-300 text-sm">✕</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {availableForAdd.length > 0 && (
+                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-500">Add:</span>
+                          {availableForAdd.slice(0, 6).map(symbol => (
+                            <button key={symbol} onClick={() => addEditTarget(symbol)}
+                              className="px-2 py-0.5 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition">
+                              + {symbol}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-4 pt-3 border-t border-gray-700">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs text-gray-400">Rebalance Threshold</span>
+                          <span className="text-sm font-bold text-cyan-400">{editThreshold}%</span>
+                        </div>
+                        <input type="range" min="5" max="30" step="1" value={editThreshold}
+                          onChange={(e) => setEditThreshold(parseInt(e.target.value))} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 mb-4">
+                      {portfolio.targets.map((target) => (
+                        <div key={target.symbol} className="flex justify-between text-sm">
+                          <span className="text-gray-300">{target.symbol}</span>
+                          <span className="text-cyan-400 font-bold">{target.percent}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   
-                  {/* ACTIONS */}
-                  <div className="mt-6 pt-4 border-t border-gray-700 flex gap-3">
-                    <button
-                      onClick={() => alert('Edit feature coming soon! You will be able to adjust allocations and threshold.')}
-                      className="flex-1 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg font-semibold transition"
-                    >
-                      ✏️ Edit Portfolio
-                    </button>
-                    <button
-                      onClick={() => deletePortfolio(portfolio.id, portfolio.name)}
-                      className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-semibold transition"
-                    >
-                      🗑️ Delete
-                    </button>
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-gray-700 flex gap-3">
+                    {isEditing ? (
+                      <>
+                        <button onClick={saveEdit} disabled={saving || Math.abs(editTotal - 100) > 0.01}
+                          className="flex-1 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg font-semibold transition text-sm disabled:opacity-30">
+                          {saving ? '⏳ Saving...' : '✅ Save Changes'}
+                        </button>
+                        <button onClick={cancelEditing}
+                          className="px-4 py-2 bg-gray-700/50 hover:bg-gray-700 text-gray-400 rounded-lg font-semibold transition text-sm">
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => startEditing(portfolio)}
+                          className="flex-1 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg font-semibold transition text-sm">
+                          ✏️ Edit
+                        </button>
+                        <button onClick={() => deletePortfolio(portfolio.id, portfolio.name)}
+                          className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-semibold transition text-sm">
+                          🗑️ Delete
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
