@@ -182,13 +182,13 @@ const Docs = ({ onBack }) => {
           <div className="doc-card rounded-xl p-5 mb-4">
             <h3 className="text-sm font-bold text-white mb-3">Trading Fee Model</h3>
             <p className="text-xs text-gray-400 mb-3 leading-relaxed">
-              Every rebalance incurs a 0.3% trading fee (Jupiter DEX standard). This fee is applied 
-              only to the swap amount, not the total portfolio value.
+              Every rebalance incurs a ~0.1% trading fee (Jupiter DEX platform fee + typical slippage). 
+              This fee is applied only to the swap amount, not the total portfolio value.
             </p>
             <div className="bg-gray-900/50 rounded-lg p-3 text-xs text-gray-300">
               <div>Portfolio: $10,000 | Drift: SOL overweight by $500</div>
               <div>Swap: Sell $500 SOL → Buy $500 BTC</div>
-              <div>Fee: $500 × 0.3% = <span className="text-yellow-400">$1.50</span></div>
+              <div>Fee: $500 × 0.1% = <span className="text-yellow-400">$0.50</span></div>
             </div>
           </div>
 
@@ -353,7 +353,7 @@ const Docs = ({ onBack }) => {
             <div className="grid grid-cols-4 gap-4 mb-6">
               {[
                 { label: 'Platform Fee', value: 'FREE', color: 'text-green-400', sub: 'No management fee' },
-                { label: 'Trading Fee', value: '0.3%', color: 'text-cyan-400', sub: 'Per swap (Jupiter)' },
+                { label: 'Trading Fee', value: '0.1%', color: 'text-cyan-400', sub: 'Per swap (Jupiter)' },
                 { label: 'Monitoring', value: 'FREE', color: 'text-green-400', sub: '24/7 alerts included' },
                 { label: 'Withdrawal', value: '$0', color: 'text-cyan-400', sub: 'SOL network fee only' },
               ].map((fee, idx) => (
@@ -368,11 +368,11 @@ const Docs = ({ onBack }) => {
             <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4">
               <h4 className="text-sm font-bold text-cyan-400 mb-2">Net Benefit Analysis</h4>
               <p className="text-xs text-gray-300 leading-relaxed">
-                Our backtests show that even after paying 0.3% per trade, rebalancing outperforms 
-                buy-and-hold in most market conditions. The key insight: rebalancing captures value 
-                from volatility (sell high / buy low), which more than compensates for trading fees.
-                A portfolio with 15 rebalances per year at 0.3% costs approximately 4.5% in fees — 
-                but typically generates 5-20% additional return versus holding.
+                Our backtests show that even after paying ~0.1% per trade, rebalancing outperforms 
+                buy-and-hold in sideways and volatile market conditions. The key insight: rebalancing 
+                captures value from volatility (sell high / buy low), which more than compensates for 
+                trading fees. In strong bull markets, buy & hold may temporarily lead — but rebalancing 
+                provides crucial downside protection and consistent risk management.
               </p>
             </div>
           </div>
