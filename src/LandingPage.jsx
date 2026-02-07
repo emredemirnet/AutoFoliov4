@@ -232,10 +232,10 @@ const LandingPage = ({ onSelectStrategy, onCustomize, onDocs }) => {
               Get Started →
             </button>
             <button 
-              onClick={() => document.getElementById('how-it-works').scrollIntoView({ behavior: 'smooth' })}
+              onClick={onDocs}
               className="px-6 py-3 border-2 border-cyan-400 text-cyan-400 font-bold rounded-xl hover:bg-cyan-400/10 transition-all text-sm"
             >
-              How It Works
+              📄 Docs
             </button>
           </div>
         </div>
