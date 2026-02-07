@@ -19,10 +19,82 @@ const Dashboard = ({ onBack }) => {
   const [editThreshold, setEditThreshold] = useState(10);
   const [editName, setEditName] = useState('');
   const [saving, setSaving] = useState(false);
+  
+  // Notification state
+  const [subEmail, setSubEmail] = useState('');
+  const [subTelegram, setSubTelegram] = useState('');
+  const [notifyEmail, setNotifyEmail] = useState(true);
+  const [notifyTelegram, setNotifyTelegram] = useState(false);
+  const [subSaving, setSubSaving] = useState(false);
+  const [subLoaded, setSubLoaded] = useState(false);
+  const [alerts, setAlerts] = useState([]);
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [telegramLink, setTelegramLink] = useState('');
 
   useEffect(() => {
-    if (connected && wallet) loadPortfolios();
+    if (connected && wallet) {
+      loadPortfolios();
+      loadSubscription();
+      loadAlerts();
+      loadTelegramLink();
+    }
   }, [connected, wallet]);
+
+  const loadTelegramLink = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/telegram/link/${wallet}`);
+      const data = await res.json();
+      if (data.link) setTelegramLink(data.link);
+    } catch (e) {}
+  };
+
+  const loadSubscription = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/subscribe/${wallet}`);
+      const data = await res.json();
+      if (data.subscribed) {
+        setSubEmail(data.email || '');
+        setSubTelegram(data.telegram_chat_id || '');
+        setNotifyEmail(data.notify_email);
+        setNotifyTelegram(data.notify_telegram);
+      }
+      setSubLoaded(true);
+    } catch (e) { setSubLoaded(true); }
+  };
+
+  const loadAlerts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/alerts/${wallet}`);
+      const data = await res.json();
+      setAlerts(data);
+    } catch (e) {}
+  };
+
+  const saveSubscription = async () => {
+    if (!subEmail && !subTelegram) { alert('Enter email or Telegram chat ID'); return; }
+    setSubSaving(true);
+    try {
+      await fetch(`${API_URL}/api/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet_address: wallet, email: subEmail || null,
+          telegram_chat_id: subTelegram || null,
+          notify_email: notifyEmail, notify_telegram: notifyTelegram,
+        }),
+      });
+    } catch (e) { alert('Error saving'); }
+    finally { setSubSaving(false); }
+  };
+
+  const testAlert = async (portfolioId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/alerts/test/${portfolioId}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) { alert(`Test alert sent! Email: ${data.sentEmail}, Telegram: ${data.sentTelegram}`); }
+      else { alert(data.error || 'Failed to send test'); }
+    } catch (e) { alert('Error sending test'); }
+  };
 
   const loadPortfolios = async () => {
     try {
@@ -205,6 +277,89 @@ const Dashboard = ({ onBack }) => {
           </div>
         ) : (
           <div className="space-y-6">
+
+            {/* Notification Settings */}
+            <div className="bg-gray-800/50 border border-yellow-500/30 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2">🔔 Rebalance Alerts</h3>
+                <div className="flex gap-2">
+                  {alerts.length > 0 && (
+                    <button onClick={() => setShowAlerts(!showAlerts)}
+                      className="text-xs px-3 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition">
+                      {showAlerts ? 'Hide' : 'Show'} History ({alerts.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mb-3">Get notified when your portfolio needs rebalancing</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <input type="checkbox" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)}
+                      className="accent-cyan-400" />
+                    <label className="text-xs text-gray-300">📧 Email</label>
+                  </div>
+                  <input type="email" value={subEmail} onChange={(e) => setSubEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full px-3 py-1.5 text-sm bg-gray-900 border border-gray-600 rounded-lg text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <input type="checkbox" checked={notifyTelegram} onChange={(e) => setNotifyTelegram(e.target.checked)}
+                      className="accent-cyan-400" />
+                    <label className="text-xs text-gray-300">📱 Telegram</label>
+                  </div>
+                  {telegramLink ? (
+                    <div className="space-y-1.5">
+                      <a href={telegramLink} target="_blank" rel="noopener noreferrer"
+                        className="block w-full px-3 py-1.5 text-sm bg-blue-500/20 border border-blue-500/50 text-blue-400 rounded-lg text-center hover:bg-blue-500/30 transition font-semibold">
+                        🤖 Connect via Telegram →
+                      </a>
+                      <div className="text-xs text-gray-500 text-center">or paste Chat ID manually:</div>
+                      <input type="text" value={subTelegram} onChange={(e) => setSubTelegram(e.target.value)}
+                        placeholder="Chat ID"
+                        className="w-full px-3 py-1 text-xs bg-gray-900 border border-gray-600 rounded-lg text-white" />
+                    </div>
+                  ) : (
+                    <input type="text" value={subTelegram} onChange={(e) => setSubTelegram(e.target.value)}
+                      placeholder="Chat ID (message @AutoFolioBot)"
+                      className="w-full px-3 py-1.5 text-sm bg-gray-900 border border-gray-600 rounded-lg text-white" />
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button onClick={saveSubscription} disabled={subSaving}
+                  className="px-4 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-sm font-semibold transition disabled:opacity-50">
+                  {subSaving ? '⏳...' : '💾 Save Settings'}
+                </button>
+                {portfolios.length > 0 && (
+                  <button onClick={() => testAlert(portfolios[0].id)}
+                    className="px-4 py-1.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg text-sm font-semibold transition">
+                    🧪 Send Test Alert
+                  </button>
+                )}
+              </div>
+
+              {/* Alert History */}
+              {showAlerts && alerts.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-gray-700 max-h-40 overflow-y-auto space-y-2">
+                  {alerts.slice(0, 10).map((alert, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs bg-gray-900/50 rounded p-2">
+                      <div>
+                        <span className="text-yellow-400">{new Date(alert.created_at).toLocaleDateString()}</span>
+                        <span className="text-gray-400 ml-2">{alert.message}</span>
+                      </div>
+                      <div className="flex gap-1">
+                        {alert.sent_email && <span className="text-green-400">📧✓</span>}
+                        {alert.sent_telegram && <span className="text-green-400">📱✓</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             {portfolios.map((portfolio) => {
               const { chartData, currentValue, gain, rebalanceCount } = getChartData(portfolio);
               const rebalancePointsData = chartData.filter(p => p.rebalance);
