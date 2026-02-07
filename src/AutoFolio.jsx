@@ -499,7 +499,11 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                   </div>
                 )}
               </div>
-              <PortfolioCreate presetTargets={getPresetTargets()} presetThreshold={presetStrategy?.threshold} presetName={presetStrategy?.name} />
+              <PortfolioCreate 
+                presetTargets={selectedAssets.map(a => ({ symbol: a, percent: allocations[a] || 0 }))} 
+                presetThreshold={deviationThreshold} 
+                presetName={presetStrategy?.name || 'My Portfolio'} 
+              />
             </div>
           </div>
         )}
