@@ -97,7 +97,7 @@ const runBacktest = (allocation, threshold, priceData) => {
   };
 };
 
-const LandingPage = ({ onSelectStrategy, onCustomize }) => {
+const LandingPage = ({ onSelectStrategy, onCustomize, onDocs }) => {
   const [perfData, setPerfData] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -415,6 +415,36 @@ const LandingPage = ({ onSelectStrategy, onCustomize }) => {
             </div>
           </div>
         </div>
+
+        {/* Roadmap */}
+        <div className="mb-16 max-w-4xl mx-auto">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="doc-card rounded-xl p-4 border border-green-500/30 text-center">
+              <span className="w-2 h-2 rounded-full bg-green-400 inline-block mb-2"></span>
+              <div className="text-xs font-bold text-green-400 mb-1">PHASE 1 — LIVE</div>
+              <div className="text-sm font-bold text-white mb-1">Backtest & Alerts</div>
+              <div className="text-xs text-gray-500">Multi-asset backtesting, email & Telegram notifications</div>
+            </div>
+            <div className="doc-card rounded-xl p-4 border border-yellow-500/30 text-center">
+              <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse inline-block mb-2"></span>
+              <div className="text-xs font-bold text-yellow-400 mb-1">PHASE 2 — IN PROGRESS</div>
+              <div className="text-sm font-bold text-white mb-1">Mobile dApp</div>
+              <div className="text-xs text-gray-500">Solana Mobile Stack, dApp Store, push notifications</div>
+            </div>
+            <div className="doc-card rounded-xl p-4 border border-cyan-500/30 text-center">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block mb-2"></span>
+              <div className="text-xs font-bold text-cyan-400 mb-1">PHASE 3 — PLANNED</div>
+              <div className="text-sm font-bold text-white mb-1">On-Chain Rebalance</div>
+              <div className="text-xs text-gray-500">Solana program vault, Jupiter auto-swap</div>
+            </div>
+          </div>
+          <div className="text-center mt-4">
+            <button onClick={onDocs}
+              className="px-5 py-2 border border-cyan-400/50 text-cyan-400 rounded-lg text-sm font-semibold hover:bg-cyan-400/10 transition">
+              📄 Read Full Documentation →
+            </button>
+          </div>
+        </div>
       </div>
 
       <style>{`
@@ -422,6 +452,7 @@ const LandingPage = ({ onSelectStrategy, onCustomize }) => {
         .glow-text { text-shadow: 0 0 20px rgba(34, 211, 238, 0.4), 0 0 40px rgba(34, 211, 238, 0.2); }
         .jup-card { background: rgba(20, 23, 31, 0.6); border: 1px solid rgba(34, 211, 238, 0.1); backdrop-filter: blur(20px); }
         .jup-card:hover { border-color: rgba(34, 211, 238, 0.3); }
+        .doc-card { background: rgba(20, 23, 31, 0.6); border: 1px solid rgba(34, 211, 238, 0.1); backdrop-filter: blur(20px); }
       `}</style>
     </div>
   );
