@@ -264,6 +264,7 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
     const days = Math.min(...assets.map(a => CRYPTO_DATA[a]?.length || 365));
     const results = [];
     const rebalances = [];
+    let lastRebalanceDay = -14; // Minimum 14 days between rebalances
     
     let holdings = {};
     assets.forEach(asset => {
@@ -283,17 +284,21 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
       });
 
       let needsRebalancing = false;
+      let maxDeviation = 0;
       assets.forEach(asset => {
         const currentPercent = (currentAllocations[asset] / totalValue) * 100;
         const targetPercent = targetAllocations[asset];
         const deviationThresholdAmount = targetPercent * (threshold / 100);
+        const deviation = Math.abs(currentPercent - targetPercent);
+        maxDeviation = Math.max(maxDeviation, deviation / targetPercent * 100);
         
-        if (Math.abs(currentPercent - targetPercent) > deviationThresholdAmount) {
+        if (deviation > deviationThresholdAmount) {
           needsRebalancing = true;
         }
       });
 
-      if (needsRebalancing && i > 0) {
+      // Only rebalance if: threshold exceeded, not day 0, and minimum interval passed
+      if (needsRebalancing && i > 0 && (i - lastRebalanceDay) >= 14) {
         const changes = [];
         assets.forEach(asset => {
           const currentPercent = (currentAllocations[asset] / totalValue) * 100;
@@ -309,7 +314,8 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
           }
         });
         
-        const TRADING_FEE = 0.003;
+        // Realistic Jupiter DEX fee: ~0.1% (platform fee + slippage)
+        const TRADING_FEE = 0.001;
         let totalFees = 0;
         
         assets.forEach(asset => {
@@ -332,6 +338,7 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
         const displayMonth = MONTHS[Math.min(monthIndex, 12)];
         
         rebalances.push({ month: displayMonth, value: totalValue, day: i, changes });
+        lastRebalanceDay = i;
       }
 
       results.push(totalValue);
@@ -711,6 +718,8 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                         <div className="flex items-center gap-2 text-xs mb-2">
                           <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                           <span className="text-yellow-400 font-semibold">{rebalancePoints.length} Rebalances</span>
+                          <span className="text-gray-500">|</span>
+                          <span className="text-gray-400">~0.1% fee per trade (Jupiter)</span>
                         </div>
                         <div className="mt-3 space-y-2 max-h-32 overflow-y-auto">
                           {rebalancePoints.slice(0, 5).map((point, idx) => (
@@ -729,8 +738,36 @@ const AutoFolio = ({ presetStrategy, onDashboard, onBack }) => {
                           )}
                         </div>
                       </div>
+
+                      {/* Market Insight */}
+                      {(() => {
+                        const last = simulationData[simulationData.length - 1];
+                        const autoWins = last.autoFolio > last.buyAndHold;
+                        const diff = ((last.autoFolio - last.buyAndHold) / last.buyAndHold * 100).toFixed(1);
+                        return (
+                          <div className={`p-4 rounded-lg border text-xs ${autoWins ? 'bg-cyan-500/10 border-cyan-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
+                            <div className="font-semibold mb-1" style={{ color: autoWins ? '#22d3ee' : '#60a5fa' }}>
+                              {autoWins ? '📊 Rebalancing Outperformed' : '📊 Buy & Hold Led This Period'}
+                            </div>
+                            <div className="text-gray-400 leading-relaxed">
+                              {autoWins 
+                                ? `Rebalancing beat buy & hold by ${diff}% over this period. Volatile, mean-reverting markets favor systematic rebalancing — selling overweight assets high and buying underweight assets low.`
+                                : `Buy & hold outperformed by ${Math.abs(diff)}% in this period. Strong directional trends (bull runs) favor holding. Rebalancing shines in sideways and volatile markets where it captures value from price oscillations. Try adjusting threshold or allocation to optimize.`
+                              }
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
+
+                  {/* Disclaimer */}
+                  <div className="mt-4 p-3 bg-gray-800/30 rounded-lg border border-gray-700/50">
+                    <p className="text-xs text-gray-500 leading-relaxed">
+                      ⚠️ Past performance does not guarantee future results. Backtests use historical data and do not account for slippage, 
+                      liquidity constraints, or extreme market events. Always do your own research before investing.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
